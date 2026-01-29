@@ -1,0 +1,139 @@
+import React, { useState, useEffect, useRef } from 'react';
+import { User, MeetingSettings } from '../types';
+import { Mic, MicOff, Video, VideoOff, RefreshCcw } from 'lucide-react';
+
+interface Props {
+    user: User;
+    localStream: MediaStream;
+}
+
+const WaitRoom: React.FC<Props> = ({ user, localStream }) => {
+    const videoRef = useRef<HTMLVideoElement>(null);
+    const [isMicOn, setIsMicOn] = useState(() => localStream.getAudioTracks()[0]?.enabled ?? true);
+    const [isCameraOn, setIsCameraOn] = useState(() => localStream.getVideoTracks()[0]?.enabled ?? true);
+    const [audioLevel, setAudioLevel] = useState(0);
+
+    // Audio Engine Refs
+    const audioContextRef = useRef<AudioContext | null>(null);
+    const analyserRef = useRef<AnalyserNode | null>(null);
+    const sourceRef = useRef<MediaStreamAudioSourceNode | null>(null);
+    const animationFrameRef = useRef<number | undefined>(undefined);
+
+    useEffect(() => {
+        if (videoRef.current) {
+            videoRef.current.srcObject = localStream;
+        }
+    }, [localStream]);
+
+    // Audio Level Visualizer
+    useEffect(() => {
+        try {
+            const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+            const audioCtx = new AudioContextClass();
+            const analyser = audioCtx.createAnalyser();
+            analyser.fftSize = 256;
+            audioContextRef.current = audioCtx;
+            analyserRef.current = analyser;
+
+            if (localStream.getAudioTracks().length > 0) {
+                const source = audioCtx.createMediaStreamSource(localStream);
+                source.connect(analyser);
+                sourceRef.current = source;
+            }
+
+            const updateLevel = () => {
+                if (!analyserRef.current) return;
+                const dataArray = new Uint8Array(analyserRef.current.frequencyBinCount);
+                analyserRef.current.getByteFrequencyData(dataArray);
+
+                let sum = 0;
+                for (let i = 0; i < dataArray.length; i++) sum += dataArray[i];
+                const average = sum / dataArray.length;
+                setAudioLevel(Math.min(100, average * 3));
+
+                animationFrameRef.current = requestAnimationFrame(updateLevel);
+            };
+            updateLevel();
+
+            return () => {
+                if (animationFrameRef.current) cancelAnimationFrame(animationFrameRef.current);
+                audioContextRef.current?.close();
+            };
+        } catch (e) {
+            console.error(e);
+        }
+    }, [localStream]);
+
+    const toggleMic = () => {
+        const newStatus = !isMicOn;
+        localStream.getAudioTracks().forEach(t => t.enabled = newStatus);
+        setIsMicOn(newStatus);
+    };
+
+    const toggleCamera = () => {
+        const newStatus = !isCameraOn;
+        localStream.getVideoTracks().forEach(t => t.enabled = newStatus);
+        setIsCameraOn(newStatus);
+    };
+
+    return (
+        <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center p-6">
+            <div className="max-w-md w-full bg-slate-900 rounded-2xl border border-slate-800 shadow-2xl p-6 text-center">
+                <div className="w-16 h-16 bg-blue-600 rounded-full flex items-center justify-center mx-auto mb-4 animate-pulse shadow-lg shadow-blue-500/20">
+                    <i className="fas fa-lock text-2xl text-white"></i>
+                </div>
+                <h2 className="text-2xl font-bold text-white mb-2">Đang chờ sự chấp thuận</h2>
+                <p className="text-slate-400 mb-8">Chủ phòng đã nhận được yêu cầu. Vui lòng đợi trong giây lát...</p>
+
+                {/* Video Preview */}
+                <div className="relative aspect-video bg-black rounded-xl overflow-hidden mb-6 border border-slate-700">
+                    <video
+                        ref={videoRef}
+                        autoPlay
+                        muted
+                        playsInline
+                        className={`w-full h-full object-cover scale-x-[-1] ${!isCameraOn ? 'hidden' : ''}`}
+                    />
+                    {!isCameraOn && (
+                        <div className="absolute inset-0 flex items-center justify-center bg-slate-800">
+                            <div className="w-16 h-16 rounded-full bg-slate-700 flex items-center justify-center text-slate-500 text-xl font-bold">
+                                {user.name.charAt(0).toUpperCase()}
+                            </div>
+                        </div>
+                    )}
+                    <div className="absolute top-2 left-2 bg-black/60 px-2 py-1 rounded text-[10px] text-white/70 uppercase font-bold tracking-wider">
+                        Your Preview
+                    </div>
+
+                    {/* Controls Overlay */}
+                    <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex items-center gap-3 bg-slate-900/80 p-2 rounded-full border border-white/10 backdrop-blur-md">
+                        <button onClick={toggleMic} className={`p-3 rounded-full transition-all ${isMicOn ? 'bg-slate-700 hover:bg-slate-600' : 'bg-red-500 hover:bg-red-600'} text-white`}>
+                            {isMicOn ? <Mic size={18} /> : <MicOff size={18} />}
+                        </button>
+                        <button onClick={toggleCamera} className={`p-3 rounded-full transition-all ${isCameraOn ? 'bg-slate-700 hover:bg-slate-600' : 'bg-red-500 hover:bg-red-600'} text-white`}>
+                            {isCameraOn ? <Video size={18} /> : <VideoOff size={18} />}
+                        </button>
+                    </div>
+                </div>
+
+                <div className="flex flex-col items-center justify-center gap-4">
+                    <div className="flex items-center gap-2 text-xs text-slate-500">
+                        <div className="w-2 h-2 bg-blue-500 rounded-full animate-ping"></div>
+                        <span>Keeping connection alive...</span>
+                    </div>
+
+                    <button
+                        onClick={() => {
+                            window.location.reload();
+                        }}
+                        className="text-xs text-slate-500 hover:text-white underline"
+                    >
+                        Gửi lại yêu cầu (Refresh)
+                    </button>
+                </div>
+            </div>
+        </div>
+    );
+};
+
+export default WaitRoom;
