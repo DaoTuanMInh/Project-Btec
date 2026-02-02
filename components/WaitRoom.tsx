@@ -1,13 +1,14 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { User, MeetingSettings } from '../types';
-import { Mic, MicOff, Video, VideoOff, RefreshCcw } from 'lucide-react';
+import { Mic, MicOff, Video, VideoOff, RefreshCcw, PhoneOff } from 'lucide-react';
 
 interface Props {
     user: User;
     localStream: MediaStream;
+    onExit: () => void;
 }
 
-const WaitRoom: React.FC<Props> = ({ user, localStream }) => {
+const WaitRoom: React.FC<Props> = ({ user, localStream, onExit }) => {
     const videoRef = useRef<HTMLVideoElement>(null);
     const [isMicOn, setIsMicOn] = useState(() => localStream.getAudioTracks()[0]?.enabled ?? true);
     const [isCameraOn, setIsCameraOn] = useState(() => localStream.getVideoTracks()[0]?.enabled ?? true);
@@ -113,6 +114,10 @@ const WaitRoom: React.FC<Props> = ({ user, localStream }) => {
                         <button onClick={toggleCamera} className={`p-3 rounded-full transition-all ${isCameraOn ? 'bg-slate-700 hover:bg-slate-600' : 'bg-red-500 hover:bg-red-600'} text-white`}>
                             {isCameraOn ? <Video size={18} /> : <VideoOff size={18} />}
                         </button>
+                        <div className="w-px h-6 bg-white/20 mx-1"></div>
+                        <button onClick={onExit} className="p-3 rounded-full bg-red-600 hover:bg-red-500 text-white transition-all shadow-lg shadow-red-500/20" title="Rời khỏi">
+                            <PhoneOff size={18} />
+                        </button>
                     </div>
                 </div>
 
@@ -122,14 +127,16 @@ const WaitRoom: React.FC<Props> = ({ user, localStream }) => {
                         <span>Keeping connection alive...</span>
                     </div>
 
-                    <button
-                        onClick={() => {
-                            window.location.reload();
-                        }}
-                        className="text-xs text-slate-500 hover:text-white underline"
-                    >
-                        Gửi lại yêu cầu (Refresh)
-                    </button>
+                    <div className="flex gap-4">
+                        <button
+                            onClick={() => {
+                                window.location.reload();
+                            }}
+                            className="text-xs text-slate-500 hover:text-white underline"
+                        >
+                            Gửi lại yêu cầu (Refresh)
+                        </button>
+                    </div>
                 </div>
             </div>
         </div>

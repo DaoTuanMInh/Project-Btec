@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { User, Message, PeerStream, MeetingSettings } from '../types';
-import { X, UserCheck, UserX, Settings, Mic, Video, Trash2, Shield, Users } from 'lucide-react';
+import { X, UserCheck, UserX, Settings, Mic, Video, Trash2, Shield, Users, Eye, EyeOff, Check, Bell } from 'lucide-react';
 import { signaling } from '../services/signaling';
 
 interface Props {
@@ -14,12 +14,22 @@ interface Props {
     onReject: (userId: string) => void;
     roomId: string;
     currentUser: User;
+    onShowToast?: (message: string, type: 'success' | 'error' | 'info' | 'warning') => void;
+    logs?: { id: string, time: string, message: string, type: 'info' | 'warning' | 'error' }[];
 }
 
 const MeetingSettingsModal: React.FC<Props> = ({
-    isOpen, onClose, joinRequests, participants, roomSettings, onUpdateSettings, onApprove, onReject, roomId, currentUser
+    isOpen, onClose, joinRequests, participants, roomSettings, onUpdateSettings, onApprove, onReject, roomId, currentUser, onShowToast, logs = []
 }) => {
-    const [activeTab, setActiveTab] = useState<'requests' | 'participants' | 'settings'>('settings');
+    const [activeTab, setActiveTab] = useState<'requests' | 'participants' | 'settings' | 'logs'>('settings');
+    const [showPassword, setShowPassword] = useState(false);
+    const [localPassword, setLocalPassword] = useState(roomSettings?.password || '');
+
+    React.useEffect(() => {
+        if (roomSettings?.password !== undefined) {
+            setLocalPassword(roomSettings.password);
+        }
+    }, [roomSettings?.password]);
 
     if (!isOpen) return null;
 
@@ -44,7 +54,15 @@ const MeetingSettingsModal: React.FC<Props> = ({
                         className={`flex-1 py-3 text-sm font-medium border-b-2 transition-colors flex items-center justify-center gap-2 ${activeTab === 'settings' ? 'border-blue-500 text-blue-400' : 'border-transparent text-slate-400 hover:text-slate-200'}`}
                     >
                         <Shield size={16} />
-                        Cài đặt phòng
+                        Cài đặt
+                    </button>
+                    <button
+                        onClick={() => setActiveTab('logs')}
+                        className={`flex-1 py-3 text-sm font-medium border-b-2 transition-colors flex items-center justify-center gap-2 ${activeTab === 'logs' ? 'border-blue-500 text-blue-400' : 'border-transparent text-slate-400 hover:text-slate-200'}`}
+                    >
+                        <Bell size={16} />
+                        Nhật ký
+                        {logs.length > 0 && <span className="bg-red-500 text-white text-[10px] px-1.5 rounded-full">{logs.length}</span>}
                     </button>
                 </div>
 
@@ -58,6 +76,43 @@ const MeetingSettingsModal: React.FC<Props> = ({
                             </div>
 
                             <div className="space-y-4">
+                                <div className="p-4 bg-slate-800/30 rounded-xl border border-slate-700/50">
+                                    <div className="mb-2">
+                                        <span className="block font-medium text-slate-200">Mật khẩu phòng</span>
+                                        <span className="text-xs text-slate-500">Đặt mật khẩu để bảo vệ phòng (Để trống nếu muốn mở)</span>
+                                    </div>
+                                    <div className="relative">
+                                        <input
+                                            type={showPassword ? "text" : "password"}
+                                            value={localPassword}
+                                            onChange={e => setLocalPassword(e.target.value)}
+                                            className="w-full bg-slate-900 border border-slate-700 rounded-lg pl-4 pr-20 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none transition-all text-white"
+                                            placeholder="Nhập mật khẩu mới..."
+                                        />
+                                        <div className="absolute right-2 top-2 flex items-center gap-1">
+                                            <button
+                                                type="button"
+                                                onClick={() => setShowPassword(!showPassword)}
+                                                className="p-1 text-slate-400 hover:text-white transition-colors"
+                                                title={showPassword ? "Ẩn mật khẩu" : "Hiện mật khẩu"}
+                                            >
+                                                {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                                            </button>
+                                            <div className="w-px h-4 bg-slate-700 mx-1"></div>
+                                            <button
+                                                type="button"
+                                                onClick={() => {
+                                                    onUpdateSettings({ ...roomSettings, password: localPassword });
+                                                    if (onShowToast) onShowToast("Đã cập nhật mật khẩu thành công!", 'success');
+                                                }}
+                                                className="p-1 text-slate-400 hover:text-emerald-400 transition-colors"
+                                                title="Lưu mật khẩu"
+                                            >
+                                                <Check size={16} />
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
                                 <label className="flex items-center justify-between p-4 bg-slate-800/30 rounded-xl cursor-pointer hover:bg-slate-800/50 transition-colors border border-slate-700/50">
                                     <div>
                                         <span className="block font-medium text-slate-200">Bắt buộc Mic</span>
@@ -96,7 +151,41 @@ const MeetingSettingsModal: React.FC<Props> = ({
                                         className="w-5 h-5 rounded border-slate-600 text-blue-600 focus:ring-blue-500 bg-slate-700"
                                     />
                                 </label>
+
+                                <label className="flex items-center justify-between p-4 bg-slate-800/30 rounded-xl cursor-pointer hover:bg-slate-800/50 transition-colors border border-slate-700/50">
+                                    <div>
+                                        <span className="block font-medium text-slate-200">Cho phép thả cảm xúc</span>
+                                        <span className="text-xs text-slate-500">Thành viên có thể sử dụng Emote</span>
+                                    </div>
+                                    <input
+                                        type="checkbox"
+                                        checked={roomSettings.allowReactions}
+                                        onChange={e => onUpdateSettings({ ...roomSettings, allowReactions: e.target.checked })}
+                                        className="w-5 h-5 rounded border-slate-600 text-blue-600 focus:ring-blue-500 bg-slate-700"
+                                    />
+                                </label>
                             </div>
+                        </div>
+                    )}
+
+                    {activeTab === 'logs' && (
+                        <div className="space-y-4">
+                            {logs.length === 0 ? (
+                                <div className="text-center text-slate-500 py-10">
+                                    <Bell size={32} className="mx-auto mb-2 opacity-50" />
+                                    <p>Chưa có nhật ký hoạt động nào.</p>
+                                </div>
+                            ) : (
+                                logs.map(log => (
+                                    <div key={log.id} className="bg-slate-800/30 border border-slate-700/50 rounded-lg p-3 flex gap-3 items-start">
+                                        <div className={`mt-0.5 w-2 h-2 rounded-full shrink-0 ${log.type === 'warning' ? 'bg-amber-500' : log.type === 'error' ? 'bg-red-500' : 'bg-blue-500'}`}></div>
+                                        <div className="flex-1">
+                                            <p className="text-sm text-slate-200">{log.message}</p>
+                                            <span className="text-xs text-slate-500 mt-1 block">{log.time}</span>
+                                        </div>
+                                    </div>
+                                ))
+                            )}
                         </div>
                     )}
                 </div>

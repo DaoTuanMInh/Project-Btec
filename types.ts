@@ -34,13 +34,25 @@ export interface MeetingSettings {
   requireMic: boolean;
   requireCamera: boolean;
   allowScreenShare: boolean;
+  waitingRoom: boolean;
+  allowReactions: boolean; // New setting
+  lockRoom: boolean;
 }
 
 
-export interface SignalingMessage {
-  type: 'offer' | 'answer' | 'candidate' | 'join' | 'leave' | 'chat' | 'settings' | 'kick'
-  | 'media-request' | 'request-join' | 'approve-join' | 'reject-join' | 'user-update';
-  from: string;
-  to?: string;
-  payload: any;
-}
+export type SignalingMessage =
+  | { type: 'join'; from: string; to?: string; roomId: string; payload: { userName: string; password?: string } }
+  | { type: 'offer'; from: string; to?: string; roomId: string; payload: { offer: RTCSessionDescriptionInit; userName: string; muted: boolean; videoOff: boolean; settings?: MeetingSettings } }
+  | { type: 'answer'; from: string; to?: string; roomId: string; payload: { answer: RTCSessionDescriptionInit; muted?: boolean; videoOff?: boolean; userName?: string } }
+  | { type: 'candidate'; from: string; to?: string; roomId: string; payload: { candidate: RTCIceCandidateInit } }
+  | { type: 'leave'; from: string; to?: string; roomId: string; payload: {} }
+  | { type: 'chat'; from: string; to?: string; roomId: string; payload: { text: string; timestamp: Date } }
+  | { type: 'kick'; from: string; to?: string; roomId: string; payload: { reason?: string } }
+  | { type: 'request-join'; from: string; to?: string; roomId: string; payload: { userName: string } }
+  | { type: 'approve-join'; from: string; to?: string; roomId: string; payload: {} }
+  | { type: 'reject-join'; from: string; to?: string; roomId: string; payload: {} }
+  | { type: 'settings'; from: string; to?: string; roomId: string; payload: MeetingSettings }
+  | { type: 'media-request'; from: string; to?: string; roomId: string; payload: { kind: 'audio' | 'video'; action: 'on' | 'off' } }
+  | { type: 'media-response'; from: string; to?: string; roomId: string; payload: { kind: 'audio' | 'video' | 'join_requirement'; status: 'accepted' | 'denied'; userName: string } }
+  | { type: 'user-update'; from: string; to?: string; roomId: string; payload: { muted?: boolean; videoOff?: boolean } }
+  | { type: 'reaction'; from: string; to?: string; roomId: string; payload: { emoji: string; senderName?: string } };

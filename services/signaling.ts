@@ -52,12 +52,12 @@ class SignalingService {
   }
 
   // Check if room exists before joining
-  checkRoom(roomId: string): Promise<{ exists: boolean; requiresPassword: boolean }> {
+  checkRoom(roomId: string, password?: string): Promise<{ exists: boolean; requiresPassword: boolean; valid: boolean }> {
     return new Promise((resolve) => {
       // Timeout protection
-      const timer = setTimeout(() => resolve({ exists: false, requiresPassword: false }), 2000);
+      const timer = setTimeout(() => resolve({ exists: false, requiresPassword: false, valid: false }), 2000);
 
-      this.socket.emit('check-room', roomId, (response: any) => {
+      this.socket.emit('check-room', roomId, password, (response: any) => {
         clearTimeout(timer);
         resolve(response);
       });
