@@ -6,9 +6,10 @@ import react from '@vitejs/plugin-react';
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, '.', '');
   return {
+    base: './', // Use relative paths for static deployment (Web Server for Chrome)
     server: {
       port: 3000,
-      host: '0.0.0.0',
+      host: '0.0.0.0', // Allow LAN access
       https: {
         key: fs.readFileSync('key.pem'),
         cert: fs.readFileSync('cert.pem'),
@@ -19,16 +20,18 @@ export default defineConfig(({ mode }) => {
           secure: false,
           changeOrigin: true,
           ws: true
+        },
+        '/api': {
+          target: 'https://localhost:3001',
+          secure: false,
+          changeOrigin: true
         }
       }
     },
     plugins: [
       react()
     ],
-    define: {
-      'process.env.API_KEY': JSON.stringify(env.AVO_API_KEY || env.GEMINI_API_KEY),
-      'process.env.GEMINI_API_KEY': JSON.stringify(env.AVO_API_KEY || env.GEMINI_API_KEY)
-    },
+
     resolve: {
       alias: {
         '@': path.resolve(__dirname, '.'),

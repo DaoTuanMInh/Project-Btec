@@ -3,6 +3,8 @@ export interface User {
   id: string;
   name: string;
   isHost?: boolean;
+  muted?: boolean;
+  videoOff?: boolean;
 }
 
 export interface Message {
@@ -19,6 +21,7 @@ export interface PeerStream {
   isLocal: boolean;
   muted: boolean;
   videoOff: boolean;
+  isScreenShare?: boolean;
 }
 
 export enum MeetingStatus {
@@ -39,6 +42,15 @@ export interface MeetingSettings {
   lockRoom: boolean;
 }
 
+export interface ReactionItem {
+  id: string;
+  emoji: string;
+  senderId: string;
+  senderName?: string;
+  timestamp: number;
+  index?: number;
+}
+
 
 export type SignalingMessage =
   | { type: 'join'; from: string; to?: string; roomId: string; payload: { userName: string; password?: string } }
@@ -55,4 +67,4 @@ export type SignalingMessage =
   | { type: 'media-request'; from: string; to?: string; roomId: string; payload: { kind: 'audio' | 'video'; action: 'on' | 'off' } }
   | { type: 'media-response'; from: string; to?: string; roomId: string; payload: { kind: 'audio' | 'video' | 'join_requirement'; status: 'accepted' | 'denied'; userName: string } }
   | { type: 'user-update'; from: string; to?: string; roomId: string; payload: { muted?: boolean; videoOff?: boolean } }
-  | { type: 'reaction'; from: string; to?: string; roomId: string; payload: { emoji: string; senderName?: string } };
+  | { type: 'reaction'; from: string; to?: string; roomId: string; payload: { emoji: string; senderName?: string; index?: number } };

@@ -13,16 +13,20 @@ type MessageHandler = (msg: SignalingMessage) => void;
 class SignalingService {
   private socket: Socket;
   private handlers: Set<MessageHandler> = new Set();
+  private currentUserToken: string | null = null; // Cache token
 
   constructor() {
-    console.log("Connecting to signaling server (via proxy)...");
-    this.socket = io({
-      path: '/socket.io', // Default, but explicit is good
+    // ZERO TRUST: Optimized for All-in-One Server
+    // Connect to current origin (works for Localhost & Ngrok automatically)
+    this.socket = io('/', {
+      autoConnect: true,
+      reconnection: true,
       rejectUnauthorized: false,
       transports: ['websocket', 'polling']
     });
 
     this.socket.on('connect', () => {
+      console.log('Connected to Signaling Server via ' + window.location.origin);
       console.log("Connected to signaling server with ID:", this.socket.id);
     });
 
@@ -52,10 +56,10 @@ class SignalingService {
   }
 
   // Check if room exists before joining
-  checkRoom(roomId: string, password?: string): Promise<{ exists: boolean; requiresPassword: boolean; valid: boolean }> {
+  checkRoom(roomId: string, password?: string): Promise<{ exists: boolean; requiresPassword: boolean; valid: boolean; locked: boolean }> {
     return new Promise((resolve) => {
       // Timeout protection
-      const timer = setTimeout(() => resolve({ exists: false, requiresPassword: false, valid: false }), 2000);
+      const timer = setTimeout(() => resolve({ exists: false, requiresPassword: false, valid: false, locked: false }), 2000);
 
       this.socket.emit('check-room', roomId, password, (response: any) => {
         clearTimeout(timer);
@@ -64,14 +68,71 @@ class SignalingService {
     });
   }
 
-  joinRoom(roomId: string, userId: string, userName: string, password?: string, isHost: boolean = false, settings?: any) {
-    this.socket.emit('join-room', roomId, userId, isHost, settings); // Send metadata to server logic
+  async joinRoom(roomId: string, userId: string, userName: string, password?: string, isHost: boolean = false, settings?: any) {
+    try {
+      // ZERO TRUST: Authenticate First to get Session Token
+      console.log(`Requesting Zero Trust Access Token...`);
 
-    // IMPORTANT: Only Host should announce presence immediately.
-    // Guests announce via 'request-join'. 
-    if (isHost) {
-      this.send('join', userId, undefined, roomId, { userName, password });
+      // Use relative path - The Server serves both Web and API now.
+      const response = await fetch(`/api/token`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          roomId,
+          userId,
+          role: isHost ? 'host' : 'guest'
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error(`Server returned ${response.status} ${response.statusText}`);
+      }
+
+      const data = await response.json();
+      if (!data.token) {
+        throw new Error("Failed to obtain access token (Empty response)");
+      }
+
+      this.currentUserToken = data.token; // Store token
+      console.log("Token obtained. Joining Secure Socket Room...");
+
+      this.socket.emit('join-room', roomId, userId, isHost, settings, data.token, (ack: any) => {
+        if (ack && ack.error) {
+          console.error("Join Denied by Zero Trust Policy:", ack.error);
+          alert(ack.error);
+        }
+      });
+
+      // IMPORTANT: Only Host should announce presence immediately.
+      if (isHost) {
+        setTimeout(() => {
+          this.send('join', userId, undefined, roomId, { userName, password });
+        }, 500);
+      }
+    } catch (err) {
+      console.error("Zero Trust Auth Failed:", err);
+      // Detailed user instruction for self-signed certs
+      alert(`Lỗi kết nối bảo mật (Zero Trust)!\n\nNguyên nhân có thể do trình duyệt chặn chứng chỉ HTTPS tự tạo của Server.\n\nHãy mở tab mới, truy cập: https://localhost:3001\nChọn "Advanced" -> "Proceed..." để chấp nhận chứng chỉ, sau đó quay lại đây thử lại.`);
     }
+  }
+
+  updateRoomSettings(roomId: string, settings: any): Promise<void> {
+    return new Promise((resolve, reject) => {
+      if (!this.currentUserToken) {
+        console.warn("No auth token available to update settings");
+        reject("No Auth Token");
+        return;
+      }
+      this.socket.emit('update-room-settings', roomId, settings, this.currentUserToken, (response: any) => {
+        if (response && response.error) {
+          console.error("Update Settings Failed:", response.error);
+          reject(response.error);
+        } else {
+          console.log("Settings updated securely on server.");
+          resolve();
+        }
+      });
+    });
   }
 
   broadcastChat(roomId: string, userId: string, text: string) {

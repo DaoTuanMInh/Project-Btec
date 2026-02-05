@@ -1,7 +1,7 @@
 
 /**
- * AVO Authentication Service
- * Tập trung vào bảo mật Token và Session
+ * AVO Authentication Service (Restored)
+ * Tập trung vào bảo mật Token và Session cho tính năng Đăng nhập/Đăng ký
  */
 
 export const storeToken = (token: string) => {
@@ -22,6 +22,6 @@ export const clearSession = () => {
 export const validateSession = () => {
   const token = getToken();
   if (!token) return false;
-  // Giả lập kiểm tra hết hạn JWT
-  return true; 
+  // TODO: Sau này sẽ thêm API call để kiểm tra token với Server thật
+  return true;
 };

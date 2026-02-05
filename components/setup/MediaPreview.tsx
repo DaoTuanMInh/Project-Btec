@@ -83,13 +83,7 @@ const MediaPreview: React.FC<MediaPreviewProps> = ({
                             >
                                 {isMicOn ? <Mic size={18} /> : <MicOff size={18} />}
                             </button>
-                            {/* Audio Visualizer Bar */}
-                            <div className="w-24 h-1.5 bg-slate-800 rounded-full overflow-hidden">
-                                <div
-                                    className={`h-full rounded-full transition-all duration-75 ${audioLevel > 60 ? 'bg-yellow-400' : 'bg-green-500'}`}
-                                    style={{ width: `${isMicOn ? audioLevel : 0}%` }}
-                                />
-                            </div>
+                            {/* Audio Visualizer Bar Removed */}
                         </div>
 
                         <button

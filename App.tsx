@@ -3,6 +3,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { User, MeetingStatus, PeerStream, MeetingSettings } from './types';
 import SetupScreen from './components/setup/SetupScreen';
 import MeetingRoom from './components/MeetingRoom';
+import { useSetupMedia } from './hooks/useSetupMedia';
 
 const App: React.FC = () => {
   const [status, setStatus] = useState<MeetingStatus>(MeetingStatus.IDLE);
@@ -11,8 +12,20 @@ const App: React.FC = () => {
   const [localStream, setLocalStream] = useState<MediaStream | null>(null);
   const [meetingSettings, setMeetingSettings] = useState<MeetingSettings | undefined>(undefined);
 
+  // Lifted Media State to persist across SetupScreen remounts
+  const setupMedia = useSetupMedia();
+
+  // Explicitly Initialize Camera ONCE at App level
+  // This guarantees it never re-runs due to hook updates or component remounts
+  useEffect(() => {
+    console.log("[App] App Mounted - Initializing Camera Singleton");
+    setupMedia.startCamera(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // Restore Session on Load
   useEffect(() => {
+    // ... (keep existing logic)
     const savedSession = sessionStorage.getItem('avo-meeting-session');
     if (savedSession) {
       try {
@@ -41,6 +54,7 @@ const App: React.FC = () => {
     try {
       let stream = existingStream;
       if (!stream) {
+        // Fallback if no preview stream (rare with hoisted hook)
         stream = await navigator.mediaDevices.getUserMedia({
           video: true,
           audio: true
@@ -77,7 +91,7 @@ const App: React.FC = () => {
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans">
       {status === MeetingStatus.IDLE ? (
-        <SetupScreen onJoin={startMeeting} />
+        <SetupScreen onJoin={startMeeting} setupMedia={setupMedia} />
       ) : (
         <MeetingRoom
           user={currentUser!}

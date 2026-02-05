@@ -1,8 +1,0 @@
-{
-  "name": "AVO Meeting - Secure Video Conferencing",
-  "description": "A professional WebRTC-based video meeting application with end-to-end encryption, screen sharing, real-time chat, and AI-powered meeting assistance.",
-  "requestFramePermissions": [
-    "camera",
-    "microphone"
-  ]
-}
