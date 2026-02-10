@@ -1,6 +1,11 @@
 import React from 'react';
-import { RefreshCcw, Settings, Lock, Plus, Copy } from 'lucide-react';
+import { RefreshCcw, Settings, Lock, Plus, Copy, Eye, EyeOff } from 'lucide-react';
 import { MeetingSettings } from '../../types';
+
+const generateRoomId = () => {
+    const s = () => Math.random().toString(36).substring(2, 6);
+    return `${s()}-${s()}-${s()}-${s()}`;
+};
 
 interface JoinFormProps {
     name: string;
@@ -25,6 +30,8 @@ const JoinForm: React.FC<JoinFormProps> = ({
     joinPassword, setJoinPassword,
     onSubmit, onShowToast
 }) => {
+    const [showPass, setShowPass] = React.useState(false);
+    const [showJoinPass, setShowJoinPass] = React.useState(false);
     return (
         <div className="flex-1 w-full max-w-md">
             <div className="bg-slate-900/50 p-6 rounded-2xl border border-slate-800 backdrop-blur-sm md:max-h-[60vh] md:overflow-y-auto custom-scrollbar">
@@ -41,7 +48,7 @@ const JoinForm: React.FC<JoinFormProps> = ({
                         type="button"
                         onClick={() => {
                             setIsCreateMode(true);
-                            if (!room) setRoom(Math.random().toString(36).substring(2, 9));
+                            if (!room) setRoom(generateRoomId());
                         }}
                         className={`flex-1 py-2 px-4 rounded-lg text-sm font-medium transition-all ${isCreateMode ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-400 hover:text-white'}`}
                     >
@@ -62,43 +69,38 @@ const JoinForm: React.FC<JoinFormProps> = ({
                         />
                     </div>
                     <div>
-                        <label className="block text-sm font-medium text-slate-300 mb-1">{isCreateMode ? "Mã Phòng (Tự động)" : "Nhập Mã Phòng"}</label>
-                        <div className="relative">
+                        <label className="block text-sm font-medium text-slate-300 mb-1">{isCreateMode ? "Mã Phòng (Tạo tự động)" : "Nhập Mã Phòng"}</label>
+                        <div className="relative group">
                             <input
                                 required
                                 type="text"
                                 value={room}
-                                onChange={e => setRoom(e.target.value)}
-                                className="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-3 focus:ring-2 focus:ring-blue-500 outline-none transition-all pr-10"
-                                placeholder="e.g. general-sync"
+                                onChange={isCreateMode ? undefined : e => setRoom(e.target.value)}
+                                className={`w-full border rounded-lg px-4 py-3 focus:ring-2 focus:ring-blue-500 outline-none transition-all pr-20 ${isCreateMode ? 'bg-slate-800/50 border-slate-700/50 text-blue-400 font-mono cursor-default select-all' : 'bg-slate-800 border-slate-700 text-white'}`}
+                                placeholder="e.g. abcd-efgh-ijkl-mnop"
                                 readOnly={isCreateMode}
                             />
                             {isCreateMode && (
-                                <div className="absolute right-3 top-3 flex items-center gap-2">
+                                <div className="absolute right-2 top-2 flex items-center gap-1">
                                     <button
                                         type="button"
                                         onClick={() => {
                                             navigator.clipboard.writeText(room);
-                                            if (onShowToast) {
-                                                onShowToast("Đã sao chép mã phòng thành công!", 'success');
-                                            } else {
-                                                // Fallback visual feedback
-                                                const btn = document.activeElement as HTMLElement;
-                                                if (btn) {
-                                                    btn.style.color = '#4ade80';
-                                                    setTimeout(() => btn.style.color = '', 1000);
-                                                }
-                                            }
+                                            onShowToast?.("Đã sao chép mã phòng thành công!", 'success');
                                         }}
-                                        className="text-slate-400 hover:text-white transition-colors"
+                                        className="p-2 text-slate-400 hover:text-white hover:bg-white/10 rounded-md transition-all"
                                         title="Sao chép mã"
                                     >
                                         <Copy size={16} />
                                     </button>
                                     <button
                                         type="button"
-                                        onClick={() => setRoom(Math.random().toString(36).substring(2, 9))}
-                                        className="text-slate-400 hover:text-white transition-colors"
+                                        onClick={() => {
+                                            const newId = generateRoomId();
+                                            setRoom(newId);
+                                            onShowToast?.("Đã tạo mã phòng mới!", 'info');
+                                        }}
+                                        className="p-2 text-slate-400 hover:text-blue-400 hover:bg-blue-500/10 rounded-md transition-all animate-in spin-in-180 duration-500"
                                         title="Tạo mã mới"
                                     >
                                         <RefreshCcw size={16} />
@@ -106,6 +108,7 @@ const JoinForm: React.FC<JoinFormProps> = ({
                                 </div>
                             )}
                         </div>
+                        {isCreateMode && <p className="text-[10px] text-slate-500 mt-1 italic">* Mã phòng được cấp tự động để đảm bảo tính duy nhất.</p>}
                     </div>
 
                     {/* Password input for JOIN mode */}
@@ -115,12 +118,19 @@ const JoinForm: React.FC<JoinFormProps> = ({
                             <div className="relative">
                                 <Lock size={14} className="absolute left-3 top-3 text-slate-500" />
                                 <input
-                                    type="password"
+                                    type={showJoinPass ? "text" : "password"}
                                     value={joinPassword}
                                     onChange={e => setJoinPassword(e.target.value)}
-                                    className="w-full bg-slate-800 border border-slate-700 rounded-lg pl-9 pr-4 py-3 focus:ring-2 focus:ring-blue-500 outline-none transition-all"
+                                    className="w-full bg-slate-800 border border-slate-700 rounded-lg pl-9 pr-10 py-3 focus:ring-2 focus:ring-blue-500 outline-none transition-all"
                                     placeholder="Nhập mật khẩu..."
                                 />
+                                <button
+                                    type="button"
+                                    onClick={() => setShowJoinPass(!showJoinPass)}
+                                    className="absolute right-3 top-3.5 text-slate-400 hover:text-blue-400 transition-colors"
+                                >
+                                    {showJoinPass ? <EyeOff size={16} /> : <Eye size={16} />}
+                                </button>
                             </div>
                         </div>
                     )}
@@ -136,12 +146,19 @@ const JoinForm: React.FC<JoinFormProps> = ({
                                 <div className="relative">
                                     <Lock size={14} className="absolute left-3 top-3 text-slate-500" />
                                     <input
-                                        type="password"
+                                        type={showPass ? "text" : "password"}
                                         value={joinSettings.password || ''}
                                         onChange={e => setJoinSettings({ ...joinSettings, password: e.target.value })}
-                                        className="w-full bg-slate-800 border border-slate-700 rounded-lg pl-9 pr-4 py-2.5 text-sm focus:ring-2 focus:ring-blue-500 outline-none transition-all"
+                                        className="w-full bg-slate-800 border border-slate-700 rounded-lg pl-9 pr-10 py-2.5 text-sm focus:ring-2 focus:ring-blue-500 outline-none transition-all"
                                         placeholder="Để trống nếu không cần mật khẩu"
                                     />
+                                    <button
+                                        type="button"
+                                        onClick={() => setShowPass(!showPass)}
+                                        className="absolute right-3 top-3 text-slate-400 hover:text-blue-400 transition-colors"
+                                    >
+                                        {showPass ? <EyeOff size={14} /> : <Eye size={14} />}
+                                    </button>
                                 </div>
                             </div>
 
@@ -149,13 +166,13 @@ const JoinForm: React.FC<JoinFormProps> = ({
                                 <label className="flex items-center gap-2 p-3 bg-slate-800/50 rounded-lg border border-slate-700/50 cursor-pointer hover:bg-slate-800 transition-colors">
                                     <input
                                         type="checkbox"
-                                        checked={joinSettings.allowScreenShare}
-                                        onChange={e => setJoinSettings({ ...joinSettings, allowScreenShare: e.target.checked })}
+                                        checked={joinSettings.requireCamera}
+                                        onChange={e => setJoinSettings({ ...joinSettings, requireCamera: e.target.checked })}
                                         className="w-4 h-4 rounded border-slate-600 text-blue-600 focus:ring-blue-500 bg-slate-700"
                                     />
                                     <div className="text-xs">
-                                        <span className="block font-medium text-slate-300">Share Screen</span>
-                                        <span className="text-slate-500">Cho phép chia sẻ</span>
+                                        <span className="block font-medium text-slate-300">Bắt buộc Cam</span>
+                                        <span className="text-slate-500">Phải bật Camera</span>
                                     </div>
                                 </label>
 
@@ -175,13 +192,13 @@ const JoinForm: React.FC<JoinFormProps> = ({
                                 <label className="flex items-center gap-2 p-3 bg-slate-800/50 rounded-lg border border-slate-700/50 cursor-pointer hover:bg-slate-800 transition-colors">
                                     <input
                                         type="checkbox"
-                                        checked={joinSettings.requireCamera}
-                                        onChange={e => setJoinSettings({ ...joinSettings, requireCamera: e.target.checked })}
+                                        checked={joinSettings.allowScreenShare}
+                                        onChange={e => setJoinSettings({ ...joinSettings, allowScreenShare: e.target.checked })}
                                         className="w-4 h-4 rounded border-slate-600 text-blue-600 focus:ring-blue-500 bg-slate-700"
                                     />
                                     <div className="text-xs">
-                                        <span className="block font-medium text-slate-300">Bắt buộc Cam</span>
-                                        <span className="text-slate-500">Phải bật Camera</span>
+                                        <span className="block font-medium text-slate-300">Share Screen</span>
+                                        <span className="text-slate-500">Cho phép chia sẻ</span>
                                     </div>
                                 </label>
 

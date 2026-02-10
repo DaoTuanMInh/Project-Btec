@@ -16,13 +16,22 @@ interface Props {
     currentUser: User;
     onShowToast?: (message: string, type: 'success' | 'error' | 'info' | 'warning') => void;
     logs?: { id: string, time: string, message: string, type: 'info' | 'warning' | 'error' }[];
+    unreadLogsCount?: number;
+    setUnreadLogsCount?: (n: number) => void;
 }
 
 const MeetingSettingsModal: React.FC<Props> = ({
-    isOpen, onClose, joinRequests, participants, roomSettings, onUpdateSettings, onApprove, onReject, roomId, currentUser, onShowToast, logs = []
+    isOpen, onClose, joinRequests, participants, roomSettings, onUpdateSettings, onApprove, onReject, roomId, currentUser, onShowToast, logs = [], unreadLogsCount = 0, setUnreadLogsCount
 }) => {
     const [activeTab, setActiveTab] = useState<'requests' | 'participants' | 'settings' | 'logs'>('settings');
     const [showPassword, setShowPassword] = useState(false);
+
+    // Reset unread logs when looking at them
+    React.useEffect(() => {
+        if (isOpen && activeTab === 'logs' && setUnreadLogsCount) {
+            setUnreadLogsCount(0);
+        }
+    }, [isOpen, activeTab, setUnreadLogsCount]);
     const [localPassword, setLocalPassword] = useState(roomSettings?.password || '');
 
     React.useEffect(() => {
@@ -62,7 +71,7 @@ const MeetingSettingsModal: React.FC<Props> = ({
                     >
                         <Bell size={16} />
                         Nhật ký
-                        {logs.length > 0 && <span className="bg-red-500 text-white text-[10px] px-1.5 rounded-full">{logs.length}</span>}
+                        {unreadLogsCount > 0 && <span className="bg-red-500 text-white text-[10px] px-1.5 rounded-full animate-pulse">{unreadLogsCount}</span>}
                     </button>
                 </div>
 
@@ -128,19 +137,6 @@ const MeetingSettingsModal: React.FC<Props> = ({
                                 </label>
                                 <label className="flex items-center justify-between p-4 bg-slate-800/30 rounded-xl cursor-pointer hover:bg-slate-800/50 transition-colors border border-slate-700/50">
                                     <div>
-                                        <span className="block font-medium text-slate-200">Bắt buộc Mic</span>
-                                        <span className="text-xs text-slate-500">Thành viên phải bật Mic khi tham gia</span>
-                                    </div>
-                                    <input
-                                        type="checkbox"
-                                        checked={roomSettings.requireMic}
-                                        onChange={e => onUpdateSettings({ ...roomSettings, requireMic: e.target.checked })}
-                                        className="w-5 h-5 rounded border-slate-600 text-blue-600 focus:ring-blue-500 bg-slate-700"
-                                    />
-                                </label>
-
-                                <label className="flex items-center justify-between p-4 bg-slate-800/30 rounded-xl cursor-pointer hover:bg-slate-800/50 transition-colors border border-slate-700/50">
-                                    <div>
                                         <span className="block font-medium text-slate-200">Bắt buộc Camera</span>
                                         <span className="text-xs text-slate-500">Thành viên phải bật Camera khi tham gia</span>
                                     </div>
@@ -148,6 +144,19 @@ const MeetingSettingsModal: React.FC<Props> = ({
                                         type="checkbox"
                                         checked={roomSettings.requireCamera}
                                         onChange={e => onUpdateSettings({ ...roomSettings, requireCamera: e.target.checked })}
+                                        className="w-5 h-5 rounded border-slate-600 text-blue-600 focus:ring-blue-500 bg-slate-700"
+                                    />
+                                </label>
+
+                                <label className="flex items-center justify-between p-4 bg-slate-800/30 rounded-xl cursor-pointer hover:bg-slate-800/50 transition-colors border border-slate-700/50">
+                                    <div>
+                                        <span className="block font-medium text-slate-200">Bắt buộc Mic</span>
+                                        <span className="text-xs text-slate-500">Thành viên phải bật Mic khi tham gia</span>
+                                    </div>
+                                    <input
+                                        type="checkbox"
+                                        checked={roomSettings.requireMic}
+                                        onChange={e => onUpdateSettings({ ...roomSettings, requireMic: e.target.checked })}
                                         className="w-5 h-5 rounded border-slate-600 text-blue-600 focus:ring-blue-500 bg-slate-700"
                                     />
                                 </label>

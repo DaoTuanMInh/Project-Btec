@@ -3,7 +3,10 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { User, MeetingStatus, PeerStream, MeetingSettings } from './types';
 import SetupScreen from './components/setup/SetupScreen';
 import MeetingRoom from './components/MeetingRoom';
+import AuthScreen from './components/auth/AuthScreen';
 import { useSetupMedia } from './hooks/useSetupMedia';
+import { validateSession, getUser, clearSession, storeUser } from './services/authService';
+import { signaling } from './services/signaling';
 
 const App: React.FC = () => {
   const [status, setStatus] = useState<MeetingStatus>(MeetingStatus.IDLE);
@@ -12,16 +15,59 @@ const App: React.FC = () => {
   const [localStream, setLocalStream] = useState<MediaStream | null>(null);
   const [meetingSettings, setMeetingSettings] = useState<MeetingSettings | undefined>(undefined);
 
+  // Auth State
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [isAuthChecked, setIsAuthChecked] = useState(false);
+  const [authUser, setAuthUser] = useState<any>(null);
+
+  // Register Session Immediately on Auth
+  useEffect(() => {
+    if (authUser?.id) {
+      signaling.registerSession(authUser.id);
+    }
+  }, [authUser]);
+
   // Lifted Media State to persist across SetupScreen remounts
   const setupMedia = useSetupMedia();
 
-  // Explicitly Initialize Camera ONCE at App level
-  // This guarantees it never re-runs due to hook updates or component remounts
+  // Check Auth on Mount
   useEffect(() => {
-    console.log("[App] App Mounted - Initializing Camera Singleton");
-    setupMedia.startCamera(false);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    const isValid = validateSession();
+    if (isValid) {
+      setIsAuthenticated(true);
+      const user = getUser();
+      if (user) {
+        setAuthUser(user);
+        if (user.currentRoom) {
+          console.log("Resuming Active Session:", user.currentRoom);
+          signaling.checkRoom(user.currentRoom, undefined, user.id).then(checkResult => {
+            const isHost = checkResult.isHost || false;
+            console.log("Resume Role:", isHost ? "HOST" : "GUEST");
+
+            navigator.mediaDevices.getUserMedia({ video: true, audio: true })
+              .then(stream => {
+                setLocalStream(stream);
+                setRoomId(user.currentRoom!);
+                setCurrentUser({ id: user.id || 'me', name: user.username, isHost: isHost, avatar: user.avatar });
+                setStatus(MeetingStatus.ACTIVE);
+              })
+              .catch(e => console.error("Auto-resume media error", e));
+          });
+        }
+      }
+    }
+    setIsAuthChecked(true);
   }, []);
+
+  // Explicitly Initialize Camera ONCE at App level
+  // Only if Authenticated to avoid permission prompt on Login screen
+  useEffect(() => {
+    if (isAuthenticated) {
+      console.log("[App] App Mounted - Initializing Camera Singleton");
+      setupMedia.startCamera(false);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isAuthenticated]);
 
   // Restore Session on Load
   useEffect(() => {
@@ -52,6 +98,11 @@ const App: React.FC = () => {
 
   const startMeeting = async (user: User, id: string, existingStream?: MediaStream, settings?: MeetingSettings) => {
     try {
+      // Enforce Auth ID if logged in (Critical for Single Session Enforcement)
+      if (authUser?.id) {
+        user.id = authUser.id;
+      }
+
       let stream = existingStream;
       if (!stream) {
         // Fallback if no preview stream (rare with hoisted hook)
@@ -84,14 +135,65 @@ const App: React.FC = () => {
     }
     setLocalStream(null);
     setStatus(MeetingStatus.IDLE);
-    setCurrentUser(null);
+    // Restore currentUser from authUser instead of null to keep avatar/profile active
+    setCurrentUser(authUser ? { id: authUser.id, name: authUser.username, avatar: authUser.avatar } : null);
     sessionStorage.removeItem('avo-meeting-session');
+
+    // Automatically restart camera for the setup screen preview
+    setTimeout(() => {
+      setupMedia.startCamera(false);
+    }, 300);
   };
+
+  if (!isAuthChecked) return <div className="min-h-screen bg-slate-950 flex items-center justify-center text-slate-500">Loading...</div>;
+
+  if (!isAuthenticated) return <AuthScreen onAuthenticated={() => {
+    setIsAuthenticated(true);
+    const user = getUser();
+    if (user) {
+      setAuthUser(user);
+      if (user.currentRoom) {
+        signaling.checkRoom(user.currentRoom, undefined, user.id).then(checkResult => {
+          const isHost = checkResult.isHost || false;
+          console.log("Resume Role:", isHost ? "HOST" : "GUEST");
+
+          navigator.mediaDevices.getUserMedia({ video: true, audio: true })
+            .then(stream => {
+              setLocalStream(stream);
+              setRoomId(user.currentRoom!);
+              setCurrentUser({ id: user.id || 'me', name: user.username, isHost: isHost, avatar: user.avatar });
+              setStatus(MeetingStatus.ACTIVE);
+            })
+            .catch(e => console.error("Auto-resume media error", e));
+        });
+      }
+    }
+  }} />;
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans">
       {status === MeetingStatus.IDLE ? (
-        <SetupScreen onJoin={startMeeting} setupMedia={setupMedia} />
+        <SetupScreen
+          onJoin={startMeeting}
+          setupMedia={setupMedia}
+          initialName={authUser?.username}
+          userId={authUser?.id}
+          onLogout={clearSession}
+          user={authUser}
+          onUpdateUser={(u) => {
+            setAuthUser(u);
+            setCurrentUser({ id: u.id, name: u.username, isHost: currentUser?.isHost, avatar: u.avatar });
+          }}
+          resumeRoomId={authUser?.currentRoom}
+          onClearResume={() => {
+            // Clear resume state
+            if (authUser) {
+              const updatedUser = { ...authUser, currentRoom: null };
+              setAuthUser(updatedUser);
+              storeUser(updatedUser);
+            }
+          }}
+        />
       ) : (
         <MeetingRoom
           user={currentUser!}

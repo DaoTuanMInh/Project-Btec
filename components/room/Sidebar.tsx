@@ -1,7 +1,8 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 import { Message, User, PeerStream } from '../../types';
-import { X, MessageSquare, Send, Mic, Video, MicOff, VideoOff, UserX, UserCheck, Search } from 'lucide-react';
+import { X, MessageSquare, Send, Mic, Video, MicOff, VideoOff, UserX, UserCheck, Search, Paperclip, File, Download, ExternalLink, Image as ImageIcon } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
 import ConfirmModal from '../ui/ConfirmModal';
 
 interface SidebarProps {
@@ -18,9 +19,12 @@ interface SidebarProps {
   joinRequests: User[];
   onApprove: (id: string) => void;
   onReject: (id: string) => void;
-  onToggleMic?: (userId: string, currentStatus: boolean) => void; // New
-  onToggleCam?: (userId: string, currentStatus: boolean) => void; // New
+  onToggleMic?: (userId: string, currentStatus: boolean) => void;
+  onToggleCam?: (userId: string, currentStatus: boolean) => void;
+  onSendFile?: (file: File) => void; // New
 }
+
+const MotionDiv = motion.div as any;
 
 const Sidebar: React.FC<SidebarProps> = ({
   isOpen,
@@ -37,11 +41,14 @@ const Sidebar: React.FC<SidebarProps> = ({
   onApprove,
   onReject,
   onToggleMic,
-  onToggleCam
+  onToggleCam,
+  onSendFile
 }) => {
   const [inputText, setInputText] = useState("");
   const [kickConfirm, setKickConfirm] = useState<{ isOpen: boolean, userId: string | null }>({ isOpen: false, userId: null });
   const [participantSearch, setParticipantSearch] = useState("");
+  const [isUploading, setIsUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const chatEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -53,6 +60,19 @@ const Sidebar: React.FC<SidebarProps> = ({
     if (inputText.trim()) {
       onSendMessage(inputText.trim());
       setInputText("");
+    }
+  };
+
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file && onSendFile) {
+      setIsUploading(true);
+      try {
+        await onSendFile(file);
+      } finally {
+        setIsUploading(false);
+        if (fileInputRef.current) fileInputRef.current.value = "";
+      }
     }
   };
 
@@ -106,12 +126,15 @@ const Sidebar: React.FC<SidebarProps> = ({
               joinRequests.map(req => (
                 <div key={req.id} className="flex flex-col bg-slate-800/50 p-3 rounded-xl border border-slate-700 hover:border-slate-600 transition-all">
                   <div className="flex items-center gap-3 mb-3">
-                    <div className="w-8 h-8 rounded-full bg-blue-600/20 text-blue-400 flex items-center justify-center font-bold text-xs">
-                      {req.name.charAt(0).toUpperCase()}
+                    <div className="w-8 h-8 rounded-full bg-blue-600/20 text-blue-400 flex items-center justify-center font-bold text-xs overflow-hidden border border-white/5">
+                      {req.avatar ? (
+                        <img src={req.avatar} alt={req.name} className="w-full h-full object-cover" />
+                      ) : (
+                        <span>{req.name.charAt(0).toUpperCase()}</span>
+                      )}
                     </div>
                     <div>
                       <h4 className="font-bold text-sm text-slate-200">{req.name}</h4>
-                      <p className="text-[10px] text-slate-500">ID: {req.id.slice(0, 4)}...</p>
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
@@ -158,16 +181,17 @@ const Sidebar: React.FC<SidebarProps> = ({
               .map(p => (
                 <div key={p.userId} className="flex items-center justify-between p-3 bg-slate-800/50 hover:bg-slate-800 rounded-xl transition-all border border-transparent hover:border-slate-700">
                   <div className="flex items-center gap-3">
-                    <div className="w-8 h-8 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-xs font-bold text-white shadow-lg">
-                      {p.userName.charAt(0).toUpperCase()}
+                    <div className="w-8 h-8 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-xs font-bold text-white shadow-lg overflow-hidden border border-white/10">
+                      {p.avatar || (p.isLocal && currentUser.avatar) ? (
+                        <img src={p.avatar || currentUser.avatar} alt={p.userName} className="w-full h-full object-cover" />
+                      ) : (
+                        <span>{p.userName.charAt(0).toUpperCase()}</span>
+                      )}
                     </div>
                     <div className="flex flex-col">
                       <span className="text-sm font-bold text-slate-200 flex items-center gap-2">
                         {p.userName}
                         {p.isLocal && <span className="text-[10px] bg-slate-700 px-1.5 py-0.5 rounded text-slate-400">YOU</span>}
-                      </span>
-                      <span className="text-[10px] text-slate-500">
-                        {p.isLocal ? (currentUser.isHost ? "Host" : "Guest") : "Member"}
                       </span>
                     </div>
                   </div>
@@ -219,56 +243,154 @@ const Sidebar: React.FC<SidebarProps> = ({
         )}
 
         {activeTab === 'chat' && (
-          <div className="pb-24 space-y-4">
-            {messages.length === 0 ? (
-              <div className="text-center text-slate-500 text-xs mt-10 italic">
-                Chưa có tin nhắn nào. Hãy bắt đầu cuộc trò chuyện!
-              </div>
-            ) : (
-              messages.map((msg) => {
-                const isMe = msg.sender === currentUser.id;
-                const senderName = isMe ? "Bạn" : (participants.find(p => p.userId === msg.sender)?.userName || "Người lạ");
-                return (
-                  <div key={msg.id} className={`flex flex-col ${isMe ? 'items-end' : 'items-start'}`}>
-                    <div className="flex items-center gap-2 mb-1">
-                      <span className="text-xs md:text-[10px] font-bold text-slate-400">{senderName}</span>
-                      <span className="text-[10px] md:text-[9px] text-slate-600">{new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
-                    </div>
-                    <div className={`px-4 py-2 md:px-3 md:py-2 rounded-xl text-base md:text-sm max-w-[85%] break-words ${isMe ? 'bg-blue-600 text-white rounded-tr-none' : 'bg-slate-800 text-slate-200 rounded-tl-none'}`}>
-                      {msg.text}
-                    </div>
-                  </div>
-                );
-              })
-            )}
+          <div className="pb-32 space-y-2 px-1">
+            <AnimatePresence initial={false}>
+              {messages.length === 0 ? (
+                <MotionDiv
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  className="text-center text-slate-500 text-xs mt-10 italic"
+                >
+                  <MessageSquare size={32} className="mx-auto mb-3 opacity-20" />
+                  Chưa có tin nhắn nào. Hãy bắt đầu cuộc trò chuyện!
+                </MotionDiv>
+              ) : (
+                messages.map((msg, index) => {
+                  const isMe = msg.sender === currentUser.id;
+                  const prevMsg = index > 0 ? messages[index - 1] : null;
+                  const nextMsg = index < messages.length - 1 ? messages[index + 1] : null;
+
+                  // Is this message followed by another one from the same sender within 1 minute?
+                  const isGroupedWithNext = nextMsg && nextMsg.sender === msg.sender &&
+                    (new Date(nextMsg.timestamp).getTime() - new Date(msg.timestamp).getTime() < 60000);
+
+                  // Is this the first message in a continuous burst from this sender?
+                  const isFirstInGroup = !prevMsg || prevMsg.sender !== msg.sender ||
+                    (new Date(msg.timestamp).getTime() - new Date(prevMsg.timestamp).getTime() >= 60000);
+
+                  const senderName = isMe ? "Bạn" : (participants.find(p => p.userId === msg.sender)?.userName || msg.userName || "Người lạ");
+
+                  return (
+                    <MotionDiv
+                      key={msg.id}
+                      initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                      animate={{ opacity: 1, y: 0, scale: 1 }}
+                      className={`flex gap-2 ${isMe ? 'flex-row-reverse' : 'flex-row'} ${isFirstInGroup ? 'mt-4' : 'mt-1'}`}
+                    >
+                      {/* Avatar - Show only on the LAST message of a group (isGroupedWithNext is false) */}
+                      <div className={`w-8 h-8 rounded-full flex items-center justify-center text-[10px] font-bold overflow-hidden shrink-0 transition-opacity self-end ${isMe ? 'bg-blue-500/10' : 'bg-slate-800'} ${isGroupedWithNext ? 'opacity-0' : 'opacity-100'}`}>
+                        {!isMe ? (
+                          participants.find(p => p.userId === msg.sender)?.avatar ?
+                            <img src={participants.find(p => p.userId === msg.sender)?.avatar} className="w-full h-full object-cover" /> :
+                            <span className="text-slate-400">{senderName.charAt(0).toUpperCase()}</span>
+                        ) : (
+                          currentUser.avatar ? <img src={currentUser.avatar} className="w-full h-full object-cover" /> : <span className="text-blue-400">{currentUser.name?.charAt(0).toUpperCase()}</span>
+                        )}
+                      </div>
+
+                      <div className={`flex flex-col min-w-0 max-w-[80%] ${isMe ? 'items-end' : 'items-start'}`}>
+                        {/* Name - Show only on the FIRST message of a group */}
+                        {isFirstInGroup && (
+                          <div className="flex items-center gap-2 mb-1 px-1">
+                            {!isMe && <span className="text-[10px] font-bold text-slate-400">{senderName}</span>}
+                            <span className="text-[9px] text-slate-600 font-medium">
+                              {new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                            </span>
+                          </div>
+                        )}
+                        <div
+                          className={`
+                            px-4 py-2 rounded-2xl text-[15px] break-words shadow-sm
+                            ${isMe
+                              ? 'bg-gradient-to-br from-blue-600 to-indigo-600 text-white'
+                              : 'bg-slate-800 text-slate-200 border border-white/5'
+                            }
+                            ${isMe
+                              ? (isFirstInGroup ? 'rounded-tr-2xl' : 'rounded-tr-sm') + ' rounded-br-sm'
+                              : (isFirstInGroup ? 'rounded-tl-2xl' : 'rounded-tl-sm') + ' rounded-bl-sm'
+                            }
+                          `}
+                        >
+                          {msg.fileUrl ? (
+                            <div className="flex flex-col gap-2 min-w-[150px]">
+                              {msg.isImage ? (
+                                <a href={msg.fileUrl} target="_blank" rel="noreferrer" className="block rounded-lg overflow-hidden border border-white/10 hover:opacity-90 transition-opacity">
+                                  <img src={msg.fileUrl} alt={msg.fileName} className="max-w-full h-auto max-h-[200px] object-cover" />
+                                </a>
+                              ) : (
+                                <div className="flex items-center gap-3 bg-white/10 p-2 rounded-lg">
+                                  <div className="w-10 h-10 bg-white/10 rounded flex items-center justify-center shrink-0">
+                                    <File size={20} />
+                                  </div>
+                                  <div className="flex-1 min-w-0">
+                                    <p className="text-xs font-bold truncate">{msg.fileName}</p>
+                                    <p className="text-[10px] opacity-60">{(msg.fileSize! / 1024 / 1024).toFixed(2)} MB</p>
+                                  </div>
+                                </div>
+                              )}
+                              <a
+                                href={msg.fileUrl}
+                                download={msg.fileName}
+                                className={`flex items-center justify-center gap-2 py-1.5 rounded-lg text-[11px] font-bold transition-all ${isMe ? 'bg-white/20 hover:bg-white/30 text-white' : 'bg-blue-600 hover:bg-blue-500 text-white'}`}
+                              >
+                                <Download size={12} /> Tải xuống
+                              </a>
+                            </div>
+                          ) : (
+                            msg.text
+                          )}
+                        </div>
+                      </div>
+                    </MotionDiv>
+                  );
+                })
+              )}
+            </AnimatePresence>
             <div ref={chatEndRef} />
           </div>
         )}
-
-
       </div>
 
-      {activeTab === 'chat' && (
-        <form onSubmit={handleSend} className="fixed bottom-0 right-0 w-full md:w-96 z-[120] p-3 border-t border-white/5 bg-slate-900/95 backdrop-blur-xl shadow-[0_-4px_20px_rgba(0,0,0,0.5)] transition-all duration-300 ease-out">
-          <div className="relative flex items-center gap-2">
-            <input
-              type="text"
-              value={inputText}
-              onChange={(e) => setInputText(e.target.value)}
-              placeholder="Nhập tin nhắn..."
-              className="w-full bg-slate-800 text-slate-200 text-base md:text-sm rounded-full pl-4 pr-12 py-2 md:py-2 focus:outline-none focus:ring-1 focus:ring-blue-500/50 placeholder:text-slate-500"
-              autoFocus
-            />
-            <button
-              type="submit"
-              disabled={!inputText.trim()}
-              className="absolute right-1.5 top-1/2 -translate-y-1/2 p-2 bg-blue-600 text-white rounded-full hover:bg-blue-500 disabled:opacity-50 disabled:hover:bg-blue-600 transition-colors"
-            >
-              <Send size={16} />
-            </button>
+      {
+        activeTab === 'chat' && (
+          <div className="fixed bottom-0 right-0 w-full md:w-96 z-[120] p-4 bg-slate-900 border-t border-white/5">
+            <form onSubmit={handleSend} className="relative group">
+              <div className="absolute inset-0 bg-blue-500/10 blur-xl opacity-0 group-focus-within:opacity-100 transition-opacity rounded-full"></div>
+              <div className="relative flex items-center gap-2 bg-slate-800 border border-slate-700 focus-within:border-blue-500/50 rounded-2xl px-1 py-1 transition-all">
+                <input
+                  type="file"
+                  ref={fileInputRef}
+                  onChange={handleFileChange}
+                  className="hidden"
+                />
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={isUploading}
+                  className="p-2 text-slate-400 hover:text-white transition-colors hover:bg-white/5 rounded-xl ml-1"
+                >
+                  {isUploading ? <div className="w-5 h-5 border-2 border-blue-500 border-t-transparent animate-spin rounded-full" /> : <Paperclip size={20} />}
+                </button>
+                <input
+                  type="text"
+                  value={inputText}
+                  onChange={(e) => setInputText(e.target.value)}
+                  placeholder="Aa"
+                  className="flex-1 bg-transparent text-slate-200 text-[16px] md:text-[15px] pl-1 pr-2 py-2 focus:outline-none placeholder:text-slate-500"
+                  autoFocus
+                />
+                <button
+                  type="submit"
+                  disabled={!inputText.trim()}
+                  className="p-2 bg-blue-600 text-white rounded-[14px] hover:bg-blue-500 disabled:opacity-30 disabled:grayscale transition-all shadow-lg active:scale-95"
+                >
+                  <Send size={18} />
+                </button>
+              </div>
+            </form>
           </div>
-        </form>
-      )}
+        )
+      }
       <ConfirmModal
         isOpen={kickConfirm.isOpen}
         onCancel={() => setKickConfirm({ ...kickConfirm, isOpen: false })}
@@ -284,7 +406,7 @@ const Sidebar: React.FC<SidebarProps> = ({
         cancelText="Hủy bỏ"
         type="danger"
       />
-    </div>
+    </div >
   );
 };
 

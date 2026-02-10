@@ -51,11 +51,15 @@ export const useWebRTC = ({
                         return [...prev, {
                             id: msg.id || Math.random().toString(),
                             sender: remoteId,
-                            text: msg.text,
-                            timestamp: new Date(msg.timestamp)
+                            text: msg.text || "",
+                            timestamp: new Date(msg.timestamp),
+                            fileUrl: msg.fileUrl,
+                            fileName: msg.fileName,
+                            fileSize: msg.fileSize,
+                            isImage: msg.isImage
                         }];
                     });
-                    transcriptRef.current.push(`${remoteName}: ${msg.text}`);
+                    transcriptRef.current.push(`${remoteName}: ${msg.fileUrl ? '[File: ' + msg.fileName + ']' : msg.text}`);
                     if (!isSidebarOpenRef.current || activeTabRef.current !== 'chat') {
                         setUnreadCount(prev => prev + 1);
                     }
@@ -97,8 +101,11 @@ export const useWebRTC = ({
                 const existing = prev.find(p => p.userId === remoteId);
                 if (existing) {
                     if (existing.stream?.id === event.streams[0].id) return prev;
+                    console.log(`Updating stream for existing peer ${remoteId}, avatar: ${existing.avatar ? 'YES' : 'NO'}`);
                     return prev.map(p => p.userId === remoteId ? { ...p, stream: event.streams[0] } : p);
                 }
+                // Create peer if not exists (fallback), but avatar will be updated later from signaling
+                console.log(`Creating new peer ${remoteId} from ontrack (avatar will be updated from signaling)`);
                 return [...prev, {
                     userId: remoteId,
                     stream: event.streams[0],

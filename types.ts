@@ -5,6 +5,7 @@ export interface User {
   isHost?: boolean;
   muted?: boolean;
   videoOff?: boolean;
+  avatar?: string;
 }
 
 export interface Message {
@@ -12,6 +13,11 @@ export interface Message {
   sender: string;
   text: string;
   timestamp: Date;
+  fileUrl?: string;
+  fileName?: string;
+  fileSize?: number;
+  isImage?: boolean;
+  userName?: string;
 }
 
 export interface PeerStream {
@@ -22,6 +28,8 @@ export interface PeerStream {
   muted: boolean;
   videoOff: boolean;
   isScreenShare?: boolean;
+  avatar?: string;
+  isSpeaking?: boolean;
 }
 
 export enum MeetingStatus {
@@ -58,7 +66,7 @@ export type SignalingMessage =
   | { type: 'answer'; from: string; to?: string; roomId: string; payload: { answer: RTCSessionDescriptionInit; muted?: boolean; videoOff?: boolean; userName?: string } }
   | { type: 'candidate'; from: string; to?: string; roomId: string; payload: { candidate: RTCIceCandidateInit } }
   | { type: 'leave'; from: string; to?: string; roomId: string; payload: {} }
-  | { type: 'chat'; from: string; to?: string; roomId: string; payload: { text: string; timestamp: Date } }
+  | { type: 'chat'; from: string; to?: string; roomId: string; payload: { text?: string; timestamp: Date; fileUrl?: string; fileName?: string; fileSize?: number; isImage?: boolean } }
   | { type: 'kick'; from: string; to?: string; roomId: string; payload: { reason?: string } }
   | { type: 'request-join'; from: string; to?: string; roomId: string; payload: { userName: string } }
   | { type: 'approve-join'; from: string; to?: string; roomId: string; payload: {} }

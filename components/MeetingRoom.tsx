@@ -133,6 +133,28 @@ const MeetingRoom: React.FC<Props> = ({ user, roomId, localStream, onLeave, sett
         state.setPeers(prev => prev.map(p => p.isLocal ? { ...p, videoOff: realVideoOff } : p));
         signaling.send('user-update', user.id, undefined, roomId, { videoOff: realVideoOff });
       }
+
+      // 4. Fetch Chat History
+      const fetchHistory = async () => {
+        try {
+          const res = await fetch(`/api/chat/history/${roomId}`);
+          const history = await res.json();
+          if (Array.isArray(history)) {
+            state.setMessages(history.map((m: any) => ({
+              id: m._id,
+              sender: m.senderId,
+              userName: m.userName,
+              text: m.text || "",
+              timestamp: new Date(m.timestamp),
+              fileUrl: m.fileUrl,
+              fileName: m.fileName,
+              fileSize: m.fileSize,
+              isImage: m.type === 'image'
+            })));
+          }
+        } catch (e) { console.error("History fetch error", e); }
+      };
+      fetchHistory();
     }
   }, [state.isVerified, localStream, roomId, user.id]);
 
@@ -172,10 +194,13 @@ const MeetingRoom: React.FC<Props> = ({ user, roomId, localStream, onLeave, sett
     user, roomId, isCurrentUserHost: state.isCurrentUserHost,
     setPeers: state.setPeers, setJoinRequests: state.setJoinRequests, setMessages: state.setMessages,
     setReactions: state.setReactions, setRoomSettings: state.setRoomSettings,
-    setMediaRequestModal: state.setMediaRequestModal, setLogs: state.setLogs, setUnreadCount: state.setUnreadCount,
+    setMediaRequestModal: state.setMediaRequestModal, setLogs: state.setLogs,
+    setUnreadCount: state.setUnreadCount,
+    setUnreadLogsCount: state.setUnreadLogsCount,
     isVerified: state.isVerified, setIsVerified: state.setIsVerified, isVerifiedRef: state.isVerifiedRef,
     isMutedRef, isVideoOffRef, roomSettingsRef: state.roomSettingsRef, transcriptRef,
     isSidebarOpenRef: state.isSidebarOpenRef, activeTabRef: state.activeTabRef,
+    isSettingsModalOpenRef: state.isSettingsModalOpenRef,
     createPeerConnection: rtc.createPeerConnection, processIceQueue: rtc.processIceQueue,
     pcRef: rtc.pcRef, iceQueue: rtc.iceQueue,
     onLeave, toggleMute, toggleVideo, settings
@@ -235,16 +260,36 @@ const MeetingRoom: React.FC<Props> = ({ user, roomId, localStream, onLeave, sett
 
   // Ensure Local Peer is in List
   useEffect(() => {
+    if (!user.id) return;
+
     state.setPeers(prev => {
-      const me = { userId: user.id, stream: media.isBlurred && media.canvasRef.current ? (media.sourceVideoRef.current as any)?.srcObject : localStream, userName: user.name, isLocal: true, muted: isMuted, videoOff: isVideoOff };
-      // Note: Logic simplification. Real logic should merge stream properly.
-      // But for refactor safety, we rely on hooks updating state.
-      // Let's just ensure basic presence.
-      if (!prev.find(p => p.isLocal)) return [...prev, me];
+      const existingMe = prev.find(p => p.isLocal);
+      const me = {
+        userId: user.id,
+        stream: media.isBlurred && media.canvasRef.current ? (media.sourceVideoRef.current as any)?.srcObject : localStream,
+        userName: user.name,
+        isLocal: true,
+        muted: isMuted,
+        videoOff: isVideoOff,
+        avatar: user.avatar
+      };
+
+      if (!existingMe) {
+        console.log("Initializing Local Peer with avatar:", user.avatar ? 'YES' : 'NO');
+        return [me, ...prev]; // Put local user at the top
+      }
+
       // Update local state in peer list
-      return prev.map(p => p.isLocal ? { ...p, muted: isMuted, videoOff: isVideoOff } : p);
+      return prev.map(p => p.isLocal ? me : p);
     });
-  }, [isMuted, isVideoOff]);
+  }, [user.id, user.name, user.avatar, isMuted, isVideoOff, localStream]);
+
+  // Handle Chat Unread Count
+  useEffect(() => {
+    if (state.isSidebarOpen && state.activeTab === 'chat') {
+      state.setUnreadCount(0);
+    }
+  }, [state.isSidebarOpen, state.activeTab]);
 
   if (!state.isVerified) {
     return (
@@ -268,31 +313,55 @@ const MeetingRoom: React.FC<Props> = ({ user, roomId, localStream, onLeave, sett
       <video ref={media.sourceVideoRef} className="hidden" playsInline muted autoPlay />
       <canvas ref={media.canvasRef} className="hidden" />
 
-      <div className="flex-1 flex flex-col relative" onClick={() => state.showControls ? null : state.setShowControls(true)}>
+      <div className="flex-1 flex flex-col relative" onClick={() => state.setShowControls(!state.showControls)}>
         <ReactionFloating reactions={state.reactions} /> {/* Fix: reactions from hook */}
 
         {/* HEADER */}
-        <header className={`h-16 px-6 flex items-center justify-between glass-effect z-20 transition-all ${!state.showControls ? '-mt-16' : ''}`}>
-          <div className="flex gap-3 items-center">
-            <div className="text-white font-bold bg-blue-600 w-9 h-9 flex items-center justify-center rounded-xl">A</div>
-            <div>
-              <h2 className="text-xs font-bold text-slate-200 flex items-center gap-2">
-                AVO MEETING
+        <header onClick={e => e.stopPropagation()} className={`h-16 md:h-20 px-4 md:px-6 flex items-center justify-between glass-effect z-20 transition-all ${!state.showControls ? '-mt-16 md:-mt-20' : ''}`}>
+          <div className="flex gap-2 md:gap-3 items-center min-w-0">
+            <img src="/logoAVO.png" alt="Logo" className="w-9 h-9 md:w-13 md:h-13 object-contain rounded-full shadow-sm shrink-0" onError={(e) => {
+              e.currentTarget.style.display = 'none';
+              e.currentTarget.parentElement?.insertAdjacentHTML('afterbegin', '<div class="text-white font-bold bg-blue-600 w-8 h-8 md:w-11 md:h-11 flex items-center justify-center rounded-xl shrink-0">A</div>');
+            }} />
+            <div className="min-w-0">
+              <h2 className="text-[10px] md:text-sm font-bold text-slate-200 flex items-center gap-1.5 md:gap-2">
+                <span className="truncate">AVO MEETING</span>
                 {state.roomSettings.lockRoom && (
-                  <span className="flex items-center gap-1 text-[10px] bg-red-500/10 text-red-500 px-2 py-0.5 rounded-full border border-red-500/20">
-                    <Lock size={10} /> Locked
+                  <span className="flex items-center gap-1 text-[9px] md:text-[10px] bg-red-500/10 text-red-500 px-1.5 md:px-2 py-0.5 rounded-full border border-red-500/20 shrink-0">
+                    <Lock size={8} className="md:w-2.5 md:h-2.5" /> Locked
                   </span>
                 )}
               </h2>
-              <div className="text-[10px] text-slate-500 cursor-pointer" onClick={() => { navigator.clipboard.writeText(roomId); state.showToast("Copied!", 'success'); }}>ID: {roomId} <Copy size={10} className="inline" /></div></div>
+              <div className="text-[9px] md:text-[10px] text-slate-500 cursor-pointer hover:text-blue-400 transition-colors flex items-center gap-1 truncate mt-0.5 md:mt-1.5" onClick={() => { navigator.clipboard.writeText(roomId); state.showToast("Copied!", 'success'); }}>
+                <span className="opacity-70">ID:</span> <span className="font-mono font-medium">{roomId}</span>
+              </div>
+            </div>
           </div>
-          {/* SecurityBadge Removed */}
-          <div className="flex gap-4">
-            {state.isCurrentUserHost && <button onClick={() => state.setIsSettingsModalOpen(true)} className="px-3 py-2 bg-slate-800 rounded-full text-xs text-slate-300 flex gap-2"><Settings size={14} /> Cài đặt</button>}
-            <button onClick={() => { state.setIsSidebarOpen(true); state.setActiveTab('participants'); }} className="px-3 py-2 bg-slate-800 rounded-full text-xs text-slate-300 flex gap-2 relative">
-              <Users size={14} /> Thành viên
+
+          <div className="flex gap-2 md:gap-4 items-center shrink-0">
+            {state.isCurrentUserHost && (
+              <button
+                onClick={() => state.setIsSettingsModalOpen(true)}
+                className="p-2 md:px-3 md:py-2 bg-slate-800 rounded-full text-xs text-slate-300 flex items-center gap-2 relative group hover:bg-slate-700 transition-colors"
+                title="Cài đặt & Nhật ký"
+              >
+                <Settings size={14} className="group-hover:rotate-45 transition-transform" />
+                <span className="hidden lg:inline text-[10px] md:text-xs">Cài đặt</span>
+                {state.unreadLogsCount > 0 && (
+                  <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[9px] md:text-[10px] font-bold w-4 h-4 md:w-5 md:h-5 rounded-full flex items-center justify-center border-2 border-slate-950 animate-pulse">
+                    {state.unreadLogsCount}
+                  </span>
+                )}
+              </button>
+            )}
+            <button
+              onClick={() => { state.setIsSidebarOpen(true); state.setActiveTab('participants'); }}
+              className="p-2 md:px-3 md:py-2 bg-slate-800 rounded-full text-xs text-slate-300 flex items-center gap-2 relative hover:bg-slate-700 transition-colors"
+            >
+              <Users size={14} />
+              <span className="hidden lg:inline">Thành viên</span>
               {state.joinRequests.length > 0 && (
-                <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[10px] font-bold w-5 h-5 rounded-full flex items-center justify-center border-2 border-slate-950">
+                <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[9px] md:text-[10px] font-bold w-4 h-4 md:w-5 md:h-5 rounded-full flex items-center justify-center border-2 border-slate-950">
                   {state.joinRequests.length}
                 </span>
               )}
@@ -303,19 +372,19 @@ const MeetingRoom: React.FC<Props> = ({ user, roomId, localStream, onLeave, sett
         <VideoGrid peers={state.peers} isLocalBlurred={media.isBlurred} onToggleFullScreen={() => document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen()} />
 
         {/* CONTROLS */}
-        <div className={`fixed bottom-6 left-0 right-0 z-50 flex justify-center transition-all ${!state.showControls ? 'translate-y-[150%]' : ''}`}>
-          <div className="flex gap-3 p-3 glass-effect rounded-[2rem] bg-slate-900/80">
-            <button onClick={() => toggleMute()} className={`w-12 h-12 rounded-full flex items-center justify-center ${isMuted ? 'bg-red-500 text-white' : 'bg-slate-800 text-slate-200'}`}>{isMuted ? <MicOff /> : <Mic />}</button>
-            <button onClick={() => toggleVideo()} className={`w-12 h-12 rounded-full flex items-center justify-center ${isVideoOff ? 'bg-red-500 text-white' : 'bg-slate-800 text-slate-200'}`}>{isVideoOff ? <VideoOff /> : <Video />}</button>
-            <button onClick={() => media.setIsBlurred(!media.isBlurred)} className={`w-12 h-12 rounded-full flex items-center justify-center ${media.isBlurred ? 'bg-emerald-600 text-white' : 'bg-slate-800 text-slate-200'}`}>{media.isBlurred ? <EyeOff /> : <Eye />}</button>
-            <button onClick={media.shareScreen} className={`hidden md:flex w-12 h-12 rounded-full items-center justify-center ${media.isScreenSharing ? 'bg-blue-600' : 'bg-slate-800'}`}><MonitorUp /></button>
+        <div onClick={e => e.stopPropagation()} className={`fixed bottom-6 left-0 right-0 z-50 flex justify-center transition-all px-4 ${!state.showControls ? 'translate-y-[150%]' : ''}`}>
+          <div className="flex gap-2 md:gap-3 p-2 md:p-3 glass-effect rounded-[2rem] bg-slate-900/80 max-w-full overflow-x-auto no-scrollbar shadow-2xl border border-white/5">
+            <button onClick={() => toggleMute()} className={`w-10 h-10 md:w-12 md:h-12 shrink-0 rounded-full flex items-center justify-center transition-colors ${isMuted ? 'bg-red-500 text-white' : 'bg-slate-800 text-slate-200 hover:bg-slate-700'}`}>{isMuted ? <MicOff size={20} /> : <Mic size={20} />}</button>
+            <button onClick={() => toggleVideo()} className={`w-10 h-10 md:w-12 md:h-12 shrink-0 rounded-full flex items-center justify-center transition-colors ${isVideoOff ? 'bg-red-500 text-white' : 'bg-slate-800 text-slate-200 hover:bg-slate-700'}`}>{isVideoOff ? <VideoOff size={20} /> : <Video size={20} />}</button>
+            <button onClick={() => media.setIsBlurred(!media.isBlurred)} className={`w-10 h-10 md:w-12 md:h-12 shrink-0 rounded-full flex items-center justify-center transition-colors ${media.isBlurred ? 'bg-emerald-600 text-white' : 'bg-slate-800 text-slate-200 hover:bg-slate-700'}`}>{media.isBlurred ? <EyeOff size={20} /> : <Eye size={20} />}</button>
+            <button onClick={media.shareScreen} className={`hidden md:flex w-12 h-12 shrink-0 rounded-full items-center justify-center transition-colors ${media.isScreenSharing ? 'bg-blue-600' : 'bg-slate-800 hover:bg-slate-700'}`}><MonitorUp size={20} /></button>
 
             {state.roomSettings.allowReactions && (
-              <div className="relative">
-                <button onClick={() => state.setIsReactionMenuOpen(!state.isReactionMenuOpen)} className="w-12 h-12 bg-slate-800 rounded-full flex items-center justify-center text-yellow-400"><Smile /></button>
+              <div className="relative shrink-0">
+                <button onClick={() => state.setIsReactionMenuOpen(!state.isReactionMenuOpen)} className="w-10 h-10 md:w-12 md:h-12 bg-slate-800 rounded-full flex items-center justify-center text-yellow-400 hover:bg-slate-700 transition-colors"><Smile size={20} /></button>
                 {state.isReactionMenuOpen && (
-                  <div className="absolute bottom-16 left-1/2 -translate-x-1/2 bg-slate-800 p-2 rounded-full flex gap-1">
-                    {['❤️', '👍', '😂', '😮', '👏', '🎉'].map((e, i) => <button key={e} onClick={() => sendReaction(e, i)} className="w-10 h-10 hover:bg-white/10 rounded-full text-xl">{e}</button>)}
+                  <div className="absolute bottom-14 md:bottom-16 left-1/2 -translate-x-1/2 bg-slate-800 p-1.5 md:p-2 rounded-full flex gap-1 shadow-2xl border border-white/10 backdrop-blur-xl">
+                    {['❤️', '👍', '😂', '😮', '👏', '🎉'].map((e, i) => <button key={e} onClick={() => sendReaction(e, i)} className="w-8 h-8 md:w-10 md:h-10 hover:bg-white/10 rounded-full text-lg md:text-xl transition-transform hover:scale-125">{e}</button>)}
                   </div>
                 )}
               </div>
@@ -328,10 +397,10 @@ const MeetingRoom: React.FC<Props> = ({ user, roomId, localStream, onLeave, sett
                 state.setIsSidebarOpen(true);
                 state.setActiveTab('chat');
               }
-            }} className={`w-12 h-12 rounded-full flex items-center justify-center relative ${state.isSidebarOpen && state.activeTab === 'chat' ? 'bg-blue-600 text-white' : 'bg-slate-800 text-slate-200'}`}><MessageSquare />
-              {state.unreadCount > 0 && <span className="absolute -top-1 -right-1 w-4 h-4 bg-red-600 rounded-full text-[10px] text-white flex items-center justify-center">{state.unreadCount}</span>}
+            }} className={`w-10 h-10 md:w-12 md:h-12 shrink-0 rounded-full flex items-center justify-center relative transition-colors ${state.isSidebarOpen && state.activeTab === 'chat' ? 'bg-blue-600 text-white' : 'bg-slate-800 text-slate-200 hover:bg-slate-700'}`}><MessageSquare size={20} />
+              {state.unreadCount > 0 && <span className="absolute -top-1 -right-1 w-4 h-4 bg-red-600 rounded-full text-[10px] text-white flex items-center justify-center border border-slate-900">{state.unreadCount}</span>}
             </button>
-            <button onClick={() => { signaling.send('leave', user.id, undefined, roomId, {}); onLeave(); }} className="px-6 h-12 bg-red-600 hover:bg-red-500 text-white rounded-full font-bold flex items-center gap-2"><PhoneOff /><span className="hidden md:inline">Leave</span></button>
+            <button onClick={() => { signaling.send('leave', user.id, undefined, roomId, {}); onLeave(); }} className="px-5 md:px-6 h-10 md:h-12 shrink-0 bg-red-600 hover:bg-red-500 text-white rounded-full font-bold flex items-center gap-2 transition-all active:scale-95"><PhoneOff size={20} /><span className="hidden md:inline">Leave</span></button>
           </div>
         </div>
       </div>
@@ -343,9 +412,58 @@ const MeetingRoom: React.FC<Props> = ({ user, roomId, localStream, onLeave, sett
         setActiveTab={state.setActiveTab}
         messages={state.messages}
         onSendMessage={(t) => {
-          const msg = { type: 'chat', text: t, timestamp: new Date(), id: Math.random().toString() };
+          const msg = { type: 'chat', text: t, timestamp: new Date(), id: Math.random().toString(), userName: user.name };
+          // E2EE Broadcast
           Object.values(rtc.dataChannelsRef.current).forEach(dc => dc.readyState === 'open' && dc.send(JSON.stringify(msg)));
-          state.setMessages(p => [...p, { id: msg.id, sender: user.id, text: t, timestamp: msg.timestamp }]);
+          // Signaling Backup + Server Persistence
+          signaling.send('chat', user.id, undefined, roomId, { text: t, timestamp: msg.timestamp, userName: user.name });
+
+          state.setMessages(p => [...p, { id: msg.id, sender: user.id, userName: user.name, text: t, timestamp: msg.timestamp }]);
+          state.setUnreadCount(0); // Clear on send
+        }}
+        onSendFile={async (file) => {
+          const formData = new FormData();
+          formData.append('file', file);
+          try {
+            const res = await fetch('/api/chat/upload', { method: 'POST', body: formData });
+            const data = await res.json();
+            if (data.url) {
+              const isImage = file.type.startsWith('image/');
+              const msgId = Math.random().toString();
+              const timestamp = new Date();
+              const msg = {
+                type: 'chat',
+                fileUrl: data.url,
+                fileName: data.fileName,
+                fileSize: data.fileSize,
+                isImage,
+                timestamp,
+                id: msgId,
+                userName: user.name
+              };
+
+              // E2EE Broadcast
+              Object.values(rtc.dataChannelsRef.current).forEach(dc => dc.readyState === 'open' && dc.send(JSON.stringify(msg)));
+              // Signaling Backup + Server Persistence
+              signaling.send('chat', user.id, undefined, roomId, { ...msg });
+
+              state.setMessages(p => [...p, {
+                id: msgId,
+                sender: user.id,
+                userName: user.name,
+                text: "",
+                timestamp,
+                fileUrl: data.url,
+                fileName: data.fileName,
+                fileSize: data.fileSize,
+                isImage
+              }]);
+              state.setUnreadCount(0);
+            }
+          } catch (e) {
+            console.error("Upload error", e);
+            state.showToast("Không thể tải file lên server.", 'error');
+          }
         }}
         currentUser={{ ...user, isHost: state.isCurrentUserHost }}
         participants={state.peers}
@@ -374,7 +492,10 @@ const MeetingRoom: React.FC<Props> = ({ user, roomId, localStream, onLeave, sett
           }
         }}
         onApprove={() => { }} onReject={() => { }}
-        roomId={roomId} currentUser={user} onShowToast={state.showToast} logs={state.logs}
+        roomId={roomId} currentUser={user} onShowToast={state.showToast}
+        logs={state.logs}
+        unreadLogsCount={state.unreadLogsCount}
+        setUnreadLogsCount={state.setUnreadLogsCount}
       />
 
       <ConfirmModal isOpen={state.mediaRequestModal.isOpen} title="Yêu cầu" message={state.mediaRequestModal.message} onConfirm={handleModalConfirm} onCancel={handleModalCancel} confirmText="Đồng ý" cancelText="Hủy" type="info" />

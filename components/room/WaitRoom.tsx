@@ -25,14 +25,17 @@ const WaitRoom: React.FC<Props> = ({ user, localStream, onExit, isMicOn, isCamer
     return (
         <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center p-6">
             <div className="max-w-md w-full bg-slate-900 rounded-2xl border border-slate-800 shadow-2xl p-6 text-center">
-                <div className="w-16 h-16 bg-blue-600 rounded-full flex items-center justify-center mx-auto mb-4 animate-pulse shadow-lg shadow-blue-500/20">
-                    <i className="fas fa-lock text-2xl text-white"></i>
+                <div className="w-28 h-28 mx-auto mb-8 relative">
+                    <img src="/logoAVO.png" alt="Logo" className="w-full h-full object-contain rounded-full shadow-xl animate-pulse" onError={(e) => {
+                        e.currentTarget.style.display = 'none';
+                        e.currentTarget.parentElement?.insertAdjacentHTML('afterbegin', '<div class="w-16 h-16 bg-blue-600 rounded-full flex items-center justify-center mx-auto mb-4 animate-pulse shadow-lg shadow-blue-500/20"><i class="fas fa-lock text-2xl text-white"></i></div>');
+                    }} />
                 </div>
                 <h2 className="text-2xl font-bold text-white mb-2">Đang chờ sự chấp thuận</h2>
                 <p className="text-slate-400 mb-8">Chủ phòng đã nhận được yêu cầu. Vui lòng đợi trong giây lát...</p>
 
                 {/* Video Preview */}
-                <div className="relative aspect-video bg-black rounded-xl overflow-hidden mb-6 border border-slate-700">
+                <div className="relative aspect-[3/4] md:aspect-video bg-black rounded-xl overflow-hidden mb-6 border border-slate-700">
                     <video
                         ref={videoRef}
                         autoPlay
@@ -42,8 +45,12 @@ const WaitRoom: React.FC<Props> = ({ user, localStream, onExit, isMicOn, isCamer
                     />
                     {!isCameraOn && (
                         <div className="absolute inset-0 flex items-center justify-center bg-slate-800">
-                            <div className="w-16 h-16 rounded-full bg-slate-700 flex items-center justify-center text-slate-500 text-xl font-bold">
-                                {user.name.charAt(0).toUpperCase()}
+                            <div className="w-16 h-16 rounded-full bg-slate-700 flex items-center justify-center text-slate-500 text-xl font-bold overflow-hidden border-4 border-slate-600">
+                                {user.avatar ? (
+                                    <img src={user.avatar} alt={user.name} className="w-full h-full object-cover" />
+                                ) : (
+                                    <span>{user.name.charAt(0).toUpperCase()}</span>
+                                )}
                             </div>
                         </div>
                     )}

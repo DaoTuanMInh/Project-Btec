@@ -18,6 +18,7 @@ interface UseMeetingSignalingProps {
     setMediaRequestModal: any;
     setLogs: any;
     setUnreadCount: any;
+    setUnreadLogsCount: any;
 
     // Refs
     isVerified: boolean;
@@ -29,6 +30,7 @@ interface UseMeetingSignalingProps {
     transcriptRef: React.MutableRefObject<string[]>;
     isSidebarOpenRef: React.MutableRefObject<boolean>;
     activeTabRef: React.MutableRefObject<string>;
+    isSettingsModalOpenRef: React.MutableRefObject<boolean>;
 
     // WebRTC Functions
     createPeerConnection: any;
@@ -45,9 +47,9 @@ interface UseMeetingSignalingProps {
 
 export const useMeetingSignaling = ({
     user, roomId, isCurrentUserHost,
-    setPeers, setJoinRequests, setMessages, setReactions, setRoomSettings, setMediaRequestModal, setLogs, setUnreadCount,
+    setPeers, setJoinRequests, setMessages, setReactions, setRoomSettings, setMediaRequestModal, setLogs, setUnreadCount, setUnreadLogsCount,
     isVerified, setIsVerified, isVerifiedRef,
-    isMutedRef, isVideoOffRef, roomSettingsRef, transcriptRef, isSidebarOpenRef, activeTabRef,
+    isMutedRef, isVideoOffRef, roomSettingsRef, transcriptRef, isSidebarOpenRef, activeTabRef, isSettingsModalOpenRef,
     createPeerConnection, processIceQueue, pcRef, iceQueue,
     onLeave, toggleMute, toggleVideo, settings
 }: UseMeetingSignalingProps) => {
@@ -55,26 +57,50 @@ export const useMeetingSignaling = ({
     const { showToast } = useToast();
     const [pendingOffer, setPendingOffer] = useState<{ from: string, payload: any } | null>(null);
     const isCurrentUserHostRef = useRef(isCurrentUserHost);
+    const userRef = useRef(user);
     useEffect(() => { isCurrentUserHostRef.current = isCurrentUserHost; }, [isCurrentUserHost]);
+    useEffect(() => { userRef.current = user; }, [user]);
 
     // handleMediaResponse removed - moved inline to useEffect to avoid stale closures
 
     const handleOffer = async (fromId: string, payload: any) => {
+        console.log(`📥 Received offer from ${fromId} (${payload.userName}) with avatar:`, payload.avatar ? 'YES' : 'NO', payload.avatar?.substring(0, 50));
         const pcAnswer = createPeerConnection(fromId, payload.userName, false);
 
-        if (payload.muted !== undefined || payload.videoOff !== undefined) {
-            setPeers((prev: any) => prev.map((p: any) => p.userId === fromId ? { ...p, muted: payload.muted, videoOff: payload.videoOff } : p));
+        if (payload.muted !== undefined || payload.videoOff !== undefined || payload.avatar !== undefined) {
+            setPeers((prev: any) => {
+                const existing = prev.find((p: any) => p.userId === fromId);
+                if (existing) {
+                    return prev.map((p: any) => p.userId === fromId ? {
+                        ...p,
+                        muted: payload.muted ?? p.muted,
+                        videoOff: payload.videoOff ?? p.videoOff,
+                        avatar: payload.avatar !== undefined ? payload.avatar : p.avatar
+                    } : p);
+                }
+                // Pre-add peer with metadata if not exists
+                return [...prev, {
+                    userId: fromId,
+                    stream: undefined,
+                    userName: payload.userName || "Guest",
+                    isLocal: false,
+                    muted: payload.muted ?? false,
+                    videoOff: payload.videoOff ?? false,
+                    avatar: payload.avatar || ''
+                }];
+            });
         }
 
         await pcAnswer.setRemoteDescription(new RTCSessionDescription(payload.offer));
         const answer = await pcAnswer.createAnswer();
         await pcAnswer.setLocalDescription(answer);
 
-        signaling.send('answer', user.id, fromId, roomId, {
+        signaling.send('answer', userRef.current.id, fromId, roomId, {
             answer,
-            userName: user.name,
+            userName: userRef.current.name,
             muted: isMutedRef.current,
-            videoOff: isVideoOffRef.current
+            videoOff: isVideoOffRef.current,
+            avatar: userRef.current.avatar
         });
         await processIceQueue(fromId);
     };
@@ -98,7 +124,7 @@ export const useMeetingSignaling = ({
                             signaling.send('reject-join', user.id, msg.from, roomId, {});
                             console.log(`🚫 Auto-rejected ${msg.payload.userName} (${msg.from}) - Room is LOCKED`);
                         } else {
-                            setJoinRequests((prev: any) => [...prev.filter((u: any) => u.id !== msg.from), { id: msg.from, name: msg.payload.userName }]);
+                            setJoinRequests((prev: any) => [...prev.filter((u: any) => u.id !== msg.from), { id: msg.from, name: msg.payload.userName, avatar: msg.payload.avatar }]);
                             console.log(`✅ Added ${msg.payload.userName} to waiting room`);
                         }
                     }
@@ -108,7 +134,7 @@ export const useMeetingSignaling = ({
                     // Wait for offer to confirm entry
                     if (!isVerified) {
                         console.log("Join Approved. Sending Join signal...");
-                        signaling.send('join', user.id, undefined, roomId, { userName: user.name, password: settings?.password });
+                        signaling.send('join', userRef.current.id, undefined, roomId, { userName: userRef.current.name, avatar: userRef.current.avatar, password: settings?.password });
                     }
                     break;
 
@@ -134,16 +160,36 @@ export const useMeetingSignaling = ({
                     }
 
                     console.log(`🔗 Creating offer for new joiner: ${msg.payload.userName} (${msg.from})`);
+
+                    // Capture metadata (Avatar) immediately
+                    setPeers((prev: any) => {
+                        const existing = prev.find((p: any) => p.userId === msg.from);
+                        if (existing) {
+                            return prev.map((p: any) => p.userId === msg.from ? { ...p, avatar: msg.payload.avatar || p.avatar } : p);
+                        }
+                        return [...prev, {
+                            userId: msg.from,
+                            stream: undefined,
+                            userName: msg.payload.userName || "Guest",
+                            isLocal: false,
+                            muted: msg.payload.muted ?? false,
+                            videoOff: msg.payload.videoOff ?? false,
+                            avatar: msg.payload.avatar || ''
+                        }];
+                    });
+
                     const pcOffer = createPeerConnection(msg.from, msg.payload.userName, true);
                     const offer = await pcOffer.createOffer();
                     await pcOffer.setLocalDescription(offer);
 
-                    signaling.send('offer', user.id, msg.from, roomId, {
+                    console.log(`📤 Sending offer to ${msg.from} with avatar:`, userRef.current.avatar ? 'YES' : 'NO', userRef.current.avatar?.substring(0, 50));
+                    signaling.send('offer', userRef.current.id, msg.from, roomId, {
                         offer,
-                        userName: user.name,
+                        userName: userRef.current.name,
                         muted: isMutedRef.current,
                         videoOff: isVideoOffRef.current,
-                        settings: roomSettingsRef.current
+                        settings: roomSettingsRef.current,
+                        avatar: userRef.current.avatar
                     });
                     break;
 
@@ -184,6 +230,11 @@ export const useMeetingSignaling = ({
                         console.log(`[Signaling] Media Request Denied: ${logMsg}`);
                         showToast(logMsg, 'error');
                         setLogs((prev: any) => [{ id: Math.random().toString(), time: new Date().toLocaleTimeString(), message: logMsg, type: 'error' }, ...prev]);
+
+                        // Handle Log Unread Count
+                        if (!isSettingsModalOpenRef.current) {
+                            setUnreadLogsCount((prev: any) => prev + 1);
+                        }
                     }
                     break;
 
@@ -245,12 +296,22 @@ export const useMeetingSignaling = ({
                         setPeers((prev: any) => {
                             const existing = prev.find((p: any) => p.userId === msg.from);
                             if (existing) {
-                                if (msg.payload.muted !== undefined || msg.payload.videoOff !== undefined) {
-                                    return prev.map((p: any) => p.userId === msg.from ? { ...p, muted: msg.payload.muted ?? p.muted, videoOff: msg.payload.videoOff ?? p.videoOff } : p);
-                                }
-                                return prev;
+                                return prev.map((p: any) => p.userId === msg.from ? {
+                                    ...p,
+                                    muted: msg.payload.muted ?? p.muted,
+                                    videoOff: msg.payload.videoOff ?? p.videoOff,
+                                    avatar: msg.payload.avatar !== undefined ? msg.payload.avatar : p.avatar
+                                } : p);
                             }
-                            return [...prev, { userId: msg.from, stream: undefined, userName: msg.payload.userName || "Guest", isLocal: false, muted: msg.payload.muted ?? false, videoOff: msg.payload.videoOff ?? false }];
+                            return [...prev, {
+                                userId: msg.from,
+                                stream: undefined,
+                                userName: msg.payload.userName || "Guest",
+                                isLocal: false,
+                                muted: msg.payload.muted ?? false,
+                                videoOff: msg.payload.videoOff ?? false,
+                                avatar: msg.payload.avatar || ''
+                            }];
                         });
                         await processIceQueue(msg.from);
                     }
@@ -279,11 +340,20 @@ export const useMeetingSignaling = ({
                 case 'chat':
                     if (String(msg.from) === String(user.id)) return;
                     setMessages((prev: any) => {
-                        const exists = prev.some((m: any) => String(m.sender) === String(msg.from) && m.text === msg.payload.text && (new Date().getTime() - new Date(m.timestamp).getTime() < 2000));
+                        const exists = prev.some((m: any) => m.id === msg.id || (String(m.sender) === String(msg.from) && m.text === msg.payload.text && (new Date().getTime() - new Date(m.timestamp).getTime() < 2000)));
                         if (exists) return prev;
-                        return [...prev, { id: Math.random().toString(), sender: msg.from, text: msg.payload.text, timestamp: new Date(msg.payload.timestamp) }];
+                        return [...prev, {
+                            id: msg.id || Math.random().toString(),
+                            sender: msg.from,
+                            text: msg.payload.text || "",
+                            timestamp: new Date(msg.payload.timestamp),
+                            fileUrl: msg.payload.fileUrl,
+                            fileName: msg.payload.fileName,
+                            fileSize: msg.payload.fileSize,
+                            isImage: msg.payload.isImage
+                        }];
                     });
-                    transcriptRef.current.push(`${msg.from}: ${msg.payload.text}`);
+                    transcriptRef.current.push(`${msg.from}: ${msg.payload.fileUrl ? '[File: ' + msg.payload.fileName + ']' : msg.payload.text}`);
                     if (!isSidebarOpenRef.current || activeTabRef.current !== 'chat') setUnreadCount((prev: any) => prev + 1);
                     break;
 
@@ -298,12 +368,12 @@ export const useMeetingSignaling = ({
         const unsub = signaling.onMessage(handleSignaling);
 
         // Join logic
-        signaling.joinRoom(roomId, user.id, user.name, settings?.password, user.isHost, settings);
-        if (!user.isHost) {
+        signaling.joinRoom(roomId, userRef.current.id, userRef.current.name, settings?.password, userRef.current.isHost, settings, userRef.current.avatar);
+        if (!userRef.current.isHost) {
             console.log("Sending join request...");
-            signaling.send('request-join', user.id, undefined, roomId, { userName: user.name });
+            signaling.send('request-join', userRef.current.id, undefined, roomId, { userName: userRef.current.name, avatar: userRef.current.avatar });
         } else {
-            signaling.send('join', user.id, undefined, roomId, { userName: user.name, password: settings?.password });
+            signaling.send('join', userRef.current.id, undefined, roomId, { userName: userRef.current.name, avatar: userRef.current.avatar, password: settings?.password });
         }
 
         return () => {

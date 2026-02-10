@@ -44,17 +44,20 @@ export const useMeetingState = (user: User, initialSettings?: MeetingSettings) =
     // 5. Access Control
     const [isVerified, setIsVerified] = useState(user.isHost);
     const [unreadCount, setUnreadCount] = useState(0);
+    const [unreadLogsCount, setUnreadLogsCount] = useState(0);
 
     // Refs for stable access in event handlers
     const isSidebarOpenRef = useRef(isSidebarOpen);
     const activeTabRef = useRef(activeTab);
     const roomSettingsRef = useRef(roomSettings);
     const isVerifiedRef = useRef(isVerified);
+    const isSettingsModalOpenRef = useRef(isSettingsModalOpen);
 
     useEffect(() => { isSidebarOpenRef.current = isSidebarOpen; }, [isSidebarOpen]);
     useEffect(() => { activeTabRef.current = activeTab; }, [activeTab]);
     useEffect(() => { roomSettingsRef.current = roomSettings; }, [roomSettings]);
     useEffect(() => { isVerifiedRef.current = isVerified; }, [isVerified]);
+    useEffect(() => { isSettingsModalOpenRef.current = isSettingsModalOpen; }, [isSettingsModalOpen]);
 
     return {
         isCurrentUserHost,
@@ -73,6 +76,8 @@ export const useMeetingState = (user: User, initialSettings?: MeetingSettings) =
         roomSettings, setRoomSettings, roomSettingsRef,
         isVerified, setIsVerified, isVerifiedRef,
         unreadCount, setUnreadCount,
+        unreadLogsCount, setUnreadLogsCount,
+        isSettingsModalOpenRef,
         showToast
     };
 };

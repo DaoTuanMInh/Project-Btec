@@ -13,41 +13,117 @@ interface VideoTileProps {
 
 const VideoTile: React.FC<VideoTileProps> = ({ peer, isBlurred, isPinned, onPin, className }) => {
   const videoRef = useRef<HTMLVideoElement>(null);
+  const [isVideoReady, setIsVideoReady] = useState(false);
+  const [isSpeaking, setIsSpeaking] = useState(false);
 
   useEffect(() => {
     if (videoRef.current && peer.stream) {
       videoRef.current.srcObject = peer.stream;
+      setIsVideoReady(false); // Reset when stream changes
+
       // Check if stream is active
       if (!peer.stream.active) {
         console.warn("Stream is inactive!");
       }
-      // Force play
+
+      // Force play and track when video is actually playing
       const playPromise = videoRef.current.play();
       if (playPromise !== undefined) {
-        playPromise.catch(error => {
-          console.error("Auto-play failed:", error);
-        });
+        playPromise
+          .then(() => {
+            setIsVideoReady(true);
+          })
+          .catch(error => {
+            console.error("Auto-play failed:", error);
+            setIsVideoReady(true); // Fallback to attempted play
+          });
       }
+    } else {
+      setIsVideoReady(false);
     }
   }, [peer.stream, peer.videoOff]);
 
+  // Audio Detection for Speaking Effect
+  useEffect(() => {
+    if (!peer.stream || peer.muted) {
+      setIsSpeaking(false);
+      return;
+    }
+
+    let audioContext: AudioContext;
+    let analyser: AnalyserNode;
+    let source: MediaStreamAudioSourceNode;
+    let animationFrame: number;
+
+    try {
+      audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+      analyser = audioContext.createAnalyser();
+      analyser.fftSize = 256;
+      source = audioContext.createMediaStreamSource(peer.stream);
+      source.connect(analyser);
+
+      const bufferLength = analyser.frequencyBinCount;
+      const dataArray = new Uint8Array(bufferLength);
+
+      const checkAudio = () => {
+        analyser.getByteFrequencyData(dataArray);
+        let sum = 0;
+        for (let i = 0; i < bufferLength; i++) {
+          sum += dataArray[i];
+        }
+        const average = sum / bufferLength;
+
+        // Threshold for speaking
+        setIsSpeaking(average > 15);
+        animationFrame = requestAnimationFrame(checkAudio);
+      };
+
+      checkAudio();
+    } catch (e) {
+      console.error("Audio analysis failed", e);
+    }
+
+    return () => {
+      if (animationFrame) cancelAnimationFrame(animationFrame);
+      if (source) source.disconnect();
+      if (audioContext) audioContext.close();
+    };
+  }, [peer.stream, peer.muted]);
+
+  // Check if we should show the avatar placeholder
+  const shouldShowAvatar = peer.videoOff || !peer.stream || !isVideoReady;
+
   return (
-    <div className={`relative group bg-black rounded-xl overflow-hidden shadow-lg border ${peer.isLocal ? 'border-slate-700' : 'border-slate-800'} flex items-center justify-center ${className || 'aspect-video'}`}>
+    <div className={`relative group bg-black rounded-xl overflow-hidden shadow-lg border ${peer.isLocal ? 'border-slate-700' : 'border-slate-800'} transition-all duration-300 ${isSpeaking && shouldShowAvatar ? 'ring-2 ring-blue-500/50 shadow-[0_0_20px_rgba(59,130,246,0.2)]' : ''} flex items-center justify-center ${className || 'aspect-video'}`}>
       <video
         ref={videoRef}
         autoPlay
         playsInline
         muted={peer.isLocal}
-        className={`w-full h-full ${isPinned ? 'object-contain' : 'object-cover'} transition-all duration-500 ${!peer.isScreenShare ? 'scale-x-[-1]' : ''} ${isBlurred && peer.isLocal ? 'blur-xl scale-110' : ''} ${peer.videoOff ? 'hidden' : 'block'}`}
+        className={`w-full h-full ${isPinned ? 'object-contain' : 'object-cover'} transition-all duration-500 ${!peer.isScreenShare ? 'scale-x-[-1]' : ''} ${isBlurred && peer.isLocal ? 'blur-xl scale-110' : ''} ${shouldShowAvatar ? 'hidden' : 'block'}`}
       />
 
-      {/* Overlay Placeholder when Video is Off */}
-      {peer.videoOff && (
+      {/* Overlay Placeholder when Video is Off or Not Ready */}
+      {shouldShowAvatar && (
         <div className="absolute inset-0 flex flex-col items-center justify-center space-y-3 bg-slate-900 w-full h-full z-10">
-          <div className="w-20 h-20 rounded-full bg-slate-800 border border-white/5 flex items-center justify-center text-2xl font-bold text-slate-400">
-            {peer.userName.charAt(0).toUpperCase()}
+          <div className={`relative w-20 h-20 rounded-full flex items-center justify-center transition-all duration-300 ${isSpeaking ? 'scale-110' : 'scale-100'}`}>
+            {/* Pulsing Rings when Speaking */}
+            {isSpeaking && (
+              <>
+                <div className="absolute inset-0 rounded-full bg-blue-500/20 animate-ping opacity-75"></div>
+                <div className="absolute -inset-2 rounded-full border border-blue-500/30 animate-[pulse_2s_cubic-bezier(0.4,0,0.6,1)_infinite]"></div>
+              </>
+            )}
+
+            <div className={`w-full h-full rounded-full bg-slate-800 border-2 flex items-center justify-center text-2xl font-bold text-slate-400 overflow-hidden z-10 relative transition-colors duration-300 ${isSpeaking ? 'border-blue-500 shadow-lg shadow-blue-500/20' : 'border-white/5'}`}>
+              {peer.avatar ? (
+                <img src={peer.avatar} alt={peer.userName} className="w-full h-full object-cover" />
+              ) : (
+                <span>{peer.userName.charAt(0).toUpperCase()}</span>
+              )}
+            </div>
           </div>
-          <span className="text-slate-500 text-xs font-medium uppercase tracking-widest">Camera Off</span>
+
         </div>
       )}
 
@@ -63,25 +139,23 @@ const VideoTile: React.FC<VideoTileProps> = ({ peer, isBlurred, isPinned, onPin,
       )}
 
       {/* Name Tag & Status Icons */}
-      <div className="absolute bottom-3 left-3 flex items-center gap-2 bg-black/60 backdrop-blur-md px-3 py-1.5 rounded-lg border border-white/10 shadow-sm z-10">
-        <div className={`w-2 h-2 rounded-full ${peer.muted ? 'bg-red-500' : 'bg-emerald-500 animate-pulse'}`}></div>
-        <span className="text-xs font-bold text-white max-w-[120px] truncate shadow-black drop-shadow-md flex items-center gap-2">
+      <div className={`absolute bottom-2 left-2 flex items-center gap-1.5 backdrop-blur-md px-2 py-1 rounded-lg border shadow-sm z-10 max-w-[80%] transition-colors duration-300 ${isSpeaking ? 'bg-blue-600/60 border-blue-500/50' : 'bg-black/60 border-white/10'}`}>
+        <div className={`w-1.5 h-1.5 rounded-full ${peer.muted ? 'bg-red-500' : isSpeaking ? 'bg-blue-400 animate-pulse' : 'bg-emerald-500 animate-pulse'}`}></div>
+        <span className="text-[10px] md:text-xs font-bold text-white truncate shadow-black drop-shadow-md">
           {peer.userName} {peer.isLocal && "(You)"}
         </span>
 
         {/* Explicit Mute Icon */}
         {peer.muted && (
-          <div className="ml-1 pl-2 border-l border-white/20 text-red-400 flex items-center gap-1">
+          <div className="ml-1 pl-2 border-l border-white/20 text-red-400 flex items-center">
             <MicOff size={12} />
-            <span className="text-[10px] uppercase font-bold tracking-wider">Muted</span>
           </div>
         )}
       </div>
 
       {isBlurred && peer.isLocal && !peer.videoOff && (
         <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-          <div className="bg-emerald-500/20 backdrop-blur-md px-4 py-2 rounded-full border border-emerald-500/30">
-            <span className="text-[10px] font-bold text-emerald-400 uppercase tracking-tighter">Privacy Blur Active</span>
+          <div className="bg-emerald-500/20 backdrop-blur-md p-2 rounded-full border border-emerald-500/30">
           </div>
         </div>
       )}
@@ -100,10 +174,6 @@ const VideoGrid: React.FC<VideoGridProps> = ({ peers, isLocalBlurred, onToggleFu
   const [isStripVisible, setIsStripVisible] = useState(true);
 
   const pinnedPeer = pinnedId ? peers.find(p => p.userId === pinnedId) : null;
-
-  if (pinnedId && !pinnedPeer) {
-    // Cleanup handled by render
-  }
 
   const togglePin = (id: string) => {
     if (pinnedId === id) setPinnedId(null);
@@ -148,28 +218,29 @@ const VideoGrid: React.FC<VideoGridProps> = ({ peers, isLocalBlurred, onToggleFu
           )}
         </div>
 
-        {/* Film Strip - Grid on Mobile, Column on Desktop */}
+        {/* Film Strip - Elegant Horizontal Scroll on Mobile, Column on Desktop */}
         {isStripVisible && otherPeers.length > 0 && (
           <div className="
-            w-full md:w-72 
+            w-full md:w-80 
             h-auto md:h-full 
-            grid grid-cols-4 md:flex md:flex-col gap-1 md:gap-4
-            p-1 md:p-0
+            flex md:flex-col gap-3
+            p-3 md:p-0
             pb-32 md:pb-0
-            overflow-visible md:overflow-y-auto 
+            overflow-x-auto md:overflow-y-auto 
             md:custom-scrollbar
             shrink-0
             animate-in slide-in-from-bottom md:slide-in-from-right duration-300
-            bg-black/40 md:bg-transparent
+            bg-slate-900/40 md:bg-transparent backdrop-blur-sm md:backdrop-blur-none
+            snap-x
           ">
             {otherPeers.map(peer => (
-              <div key={peer.userId} className="aspect-video md:aspect-auto md:h-40 md:min-h-[160px] cursor-pointer" onClick={() => togglePin(peer.userId)}>
+              <div key={peer.userId} className="w-40 md:w-full aspect-[9/12] md:aspect-auto md:h-44 md:min-h-[176px] cursor-pointer snap-start shrink-0" onClick={() => togglePin(peer.userId)}>
                 <VideoTile
                   peer={peer}
                   isBlurred={isLocalBlurred}
                   isPinned={false}
                   onPin={togglePin}
-                  className="w-full h-full object-cover rounded md:rounded-xl border border-white/10"
+                  className="w-full h-full object-cover rounded-2xl border border-white/10 shadow-xl"
                 />
               </div>
             ))}
@@ -180,8 +251,8 @@ const VideoGrid: React.FC<VideoGridProps> = ({ peers, isLocalBlurred, onToggleFu
   }
 
   return (
-    <div className="flex-1 p-6 pb-32 overflow-y-auto w-full h-full custom-scrollbar">
-      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6 auto-rows-max max-w-7xl mx-auto">
+    <div className="flex-1 p-4 md:p-6 pb-32 overflow-y-auto w-full h-full custom-scrollbar">
+      <div className={`grid ${peers.length > 2 ? 'grid-cols-2' : 'grid-cols-1'} md:grid-cols-2 xl:grid-cols-3 gap-3 md:gap-6 auto-rows-max max-w-7xl mx-auto animate-in fade-in zoom-in-95 duration-500`}>
         {peers.map(peer => (
           <VideoTile
             key={peer.userId}

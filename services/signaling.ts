@@ -1,5 +1,6 @@
 import { io, Socket } from "socket.io-client";
 import { SignalingMessage } from '../types';
+import { clearSession } from './authService';
 
 // Determine the signaling server URL based on current host
 // This allows it to work on localhost and LAN IP (e.g. 192.168.x.x:3001)
@@ -34,9 +35,27 @@ class SignalingService {
       this.handlers.forEach(handler => handler(msg));
     });
 
+    this.socket.on('force-logout', (msg: any) => {
+      console.warn("Force Logout:", msg.reason);
+      alert("Tài khoản của bạn đã được đăng nhập ở nơi khác. Vui lòng đăng nhập lại.");
+      clearSession();
+    });
+
     this.socket.on('connect_error', (err) => {
       console.error("Signaling connection error:", err);
     });
+  }
+
+  // Identify session immediately after login
+  registerSession(userId: string) {
+    console.log("Registering Session for User:", userId);
+    if (this.socket.connected) {
+      this.socket.emit('register-session', userId);
+    } else {
+      this.socket.once('connect', () => {
+        this.socket.emit('register-session', userId);
+      });
+    }
   }
 
   onMessage(handler: MessageHandler) {
@@ -56,19 +75,19 @@ class SignalingService {
   }
 
   // Check if room exists before joining
-  checkRoom(roomId: string, password?: string): Promise<{ exists: boolean; requiresPassword: boolean; valid: boolean; locked: boolean }> {
+  checkRoom(roomId: string, password?: string, userId?: string): Promise<{ exists: boolean; requiresPassword: boolean; valid: boolean; locked: boolean; isHost?: boolean }> {
     return new Promise((resolve) => {
       // Timeout protection
       const timer = setTimeout(() => resolve({ exists: false, requiresPassword: false, valid: false, locked: false }), 2000);
 
-      this.socket.emit('check-room', roomId, password, (response: any) => {
+      this.socket.emit('check-room', roomId, password, userId, (response: any) => {
         clearTimeout(timer);
         resolve(response);
       });
     });
   }
 
-  async joinRoom(roomId: string, userId: string, userName: string, password?: string, isHost: boolean = false, settings?: any) {
+  async joinRoom(roomId: string, userId: string, userName: string, password?: string, isHost: boolean = false, settings?: any, avatar?: string) {
     try {
       // ZERO TRUST: Authenticate First to get Session Token
       console.log(`Requesting Zero Trust Access Token...`);
@@ -96,19 +115,12 @@ class SignalingService {
       this.currentUserToken = data.token; // Store token
       console.log("Token obtained. Joining Secure Socket Room...");
 
-      this.socket.emit('join-room', roomId, userId, isHost, settings, data.token, (ack: any) => {
+      this.socket.emit('join-room', roomId, userId, userName, isHost, settings, data.token, avatar, (ack: any) => {
         if (ack && ack.error) {
           console.error("Join Denied by Zero Trust Policy:", ack.error);
           alert(ack.error);
         }
       });
-
-      // IMPORTANT: Only Host should announce presence immediately.
-      if (isHost) {
-        setTimeout(() => {
-          this.send('join', userId, undefined, roomId, { userName, password });
-        }, 500);
-      }
     } catch (err) {
       console.error("Zero Trust Auth Failed:", err);
       // Detailed user instruction for self-signed certs

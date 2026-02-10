@@ -10,6 +10,7 @@ interface MediaPreviewProps {
     onReloadCamera: () => void;
     audioLevel: number;
     userName: string;
+    userAvatar?: string;
 }
 
 const MediaPreview: React.FC<MediaPreviewProps> = ({
@@ -20,7 +21,8 @@ const MediaPreview: React.FC<MediaPreviewProps> = ({
     toggleCamera,
     onReloadCamera,
     audioLevel,
-    userName
+    userName,
+    userAvatar
 }) => {
     const videoRef = useRef<HTMLVideoElement>(null);
 
@@ -39,7 +41,7 @@ const MediaPreview: React.FC<MediaPreviewProps> = ({
 
     return (
         <div className="flex-1 w-full max-w-xl">
-            <div className="relative aspect-video bg-slate-900 rounded-2xl overflow-hidden border-2 border-slate-800 shadow-2xl group flex flex-col">
+            <div className="relative aspect-[3/4] md:aspect-video bg-slate-900 rounded-2xl overflow-hidden border-2 border-slate-800 shadow-2xl group flex flex-col">
                 <div className="flex-1 relative overflow-hidden">
                     <video
                         ref={videoRef}
@@ -50,8 +52,12 @@ const MediaPreview: React.FC<MediaPreviewProps> = ({
                     />
                     {!isCameraOn && (
                         <div className="w-full h-full flex items-center justify-center bg-slate-800 absolute inset-0">
-                            <div className="w-24 h-24 rounded-full bg-slate-700 flex items-center justify-center text-slate-500 text-2xl font-bold">
-                                {userName.charAt(0).toUpperCase() || "U"}
+                            <div className="w-24 h-24 rounded-full bg-slate-700 flex items-center justify-center text-slate-500 text-2xl font-bold overflow-hidden border-4 border-slate-600">
+                                {userAvatar ? (
+                                    <img src={userAvatar} alt={userName} className="w-full h-full object-cover" />
+                                ) : (
+                                    <span>{userName.charAt(0).toUpperCase() || "U"}</span>
+                                )}
                             </div>
                         </div>
                     )}
