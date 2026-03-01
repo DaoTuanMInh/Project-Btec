@@ -28,20 +28,23 @@ const ReactionParticle: React.FC<{ reaction: ReactionItem }> = ({ reaction }) =>
             style={{ marginLeft: `${originOffset}px` }}
         >
             <motion.div
-                initial={{ opacity: 0, scale: 0.2, y: 50, x: 0, rotate: 0 }}
+                initial={{ opacity: 0, scale: 0.5, y: 0, x: 0, rotate: 0 }}
                 animate={{
                     opacity: [0, 1, 1, 0],
-                    scale: [0.2, 1.2, randoms.scale],
-                    y: randoms.y,
-                    x: randoms.x,
-                    rotate: randoms.rotate
+                    scale: [0.5, 1.2, 1, 0.9],
+                    y: [0, randoms.y * 0.6, randoms.y],
+                    x: [0, randoms.x * 0.5, -randoms.x * 0.3, randoms.x],
+                    rotate: [0, randoms.rotate, -randoms.rotate * 0.5, randoms.rotate]
                 }}
                 transition={{
                     duration: randoms.duration,
-                    ease: [0.22, 1, 0.36, 1],
-                    times: [0, 0.1, 0.8, 1]
+                    opacity: { duration: randoms.duration, times: [0, 0.1, 0.7, 1] },
+                    scale: { duration: randoms.duration, times: [0, 0.1, 0.8, 1] },
+                    y: { duration: randoms.duration, ease: "easeOut" },
+                    x: { duration: randoms.duration, ease: "easeInOut" },
+                    rotate: { duration: randoms.duration, ease: "easeInOut" }
                 }}
-                style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px' }} // Use inline style to avoid TS className error on motion.div
+                style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px' }}
             >
                 <span className="text-4xl drop-shadow-lg filter pb-1">{reaction.emoji}</span>
                 <span className="text-[10px] font-bold text-white bg-black/40 px-2 py-0.5 rounded-full backdrop-blur-sm whitespace-nowrap shadow-sm">

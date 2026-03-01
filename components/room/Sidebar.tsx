@@ -300,11 +300,7 @@ const Sidebar: React.FC<SidebarProps> = ({
                         )}
                         <div
                           className={`
-                            px-4 py-2 rounded-2xl text-[15px] break-words shadow-sm
-                            ${isMe
-                              ? 'bg-gradient-to-br from-blue-600 to-indigo-600 text-white'
-                              : 'bg-slate-800 text-slate-200 border border-white/5'
-                            }
+                            ${msg.fileUrl && msg.isImage ? 'p-0 bg-transparent shadow-none' : `px-4 py-2 rounded-2xl text-[15px] break-words shadow-sm ${isMe ? 'bg-gradient-to-br from-blue-600 to-indigo-600 text-white' : 'bg-slate-800 text-slate-200 border border-white/5'}`}
                             ${isMe
                               ? (isFirstInGroup ? 'rounded-tr-2xl' : 'rounded-tr-sm') + ' rounded-br-sm'
                               : (isFirstInGroup ? 'rounded-tl-2xl' : 'rounded-tl-sm') + ' rounded-bl-sm'
@@ -314,8 +310,8 @@ const Sidebar: React.FC<SidebarProps> = ({
                           {msg.fileUrl ? (
                             <div className="flex flex-col gap-2 min-w-[150px]">
                               {msg.isImage ? (
-                                <a href={msg.fileUrl} target="_blank" rel="noreferrer" className="block rounded-lg overflow-hidden border border-white/10 hover:opacity-90 transition-opacity">
-                                  <img src={msg.fileUrl} alt={msg.fileName} className="max-w-full h-auto max-h-[200px] object-cover" />
+                                <a href={msg.fileUrl} target="_blank" rel="noreferrer" className="block rounded-lg overflow-hidden hover:opacity-90 transition-opacity">
+                                  <img src={msg.fileUrl} alt={msg.fileName} className="max-w-full h-auto max-h-[250px] object-cover rounded-[10px]" />
                                 </a>
                               ) : (
                                 <div className="flex items-center gap-3 bg-white/10 p-2 rounded-lg">
@@ -328,13 +324,15 @@ const Sidebar: React.FC<SidebarProps> = ({
                                   </div>
                                 </div>
                               )}
-                              <a
-                                href={msg.fileUrl}
-                                download={msg.fileName}
-                                className={`flex items-center justify-center gap-2 py-1.5 rounded-lg text-[11px] font-bold transition-all ${isMe ? 'bg-white/20 hover:bg-white/30 text-white' : 'bg-blue-600 hover:bg-blue-500 text-white'}`}
-                              >
-                                <Download size={12} /> Tải xuống
-                              </a>
+                              {(!msg.isImage) && (
+                                <a
+                                  href={msg.fileUrl}
+                                  download={msg.fileName}
+                                  className={`flex items-center justify-center gap-2 py-1.5 rounded-lg text-[11px] font-bold transition-all ${isMe ? 'bg-white/20 hover:bg-white/30 text-white' : 'bg-blue-600 hover:bg-blue-500 text-white'}`}
+                                >
+                                  <Download size={12} /> Tải xuống
+                                </a>
+                              )}
                             </div>
                           ) : (
                             msg.text

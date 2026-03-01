@@ -111,7 +111,7 @@ const AuthScreen: React.FC<AuthScreenProps> = ({ onAuthenticated }) => {
                 className="w-full max-w-md bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl overflow-hidden"
             >
                 <div className="bg-slate-800/50 p-6 text-center border-b border-slate-800">
-                    <img src="/logoAVO.png" alt="Logo" className="w-24 h-24 mx-auto mb-1 object-contain rounded-full shadow-lg" onError={(e) => e.currentTarget.style.display = 'none'} />
+                    <img src="/logoAVO.png" alt="Logo" className="w-24 h-24 mx-auto mb-1 object-contain rounded-full shadow-lg" />
                     <p className="text-slate-200 font-medium">
                         {isLogin ? "Đăng nhập bằng Email" : (otpSent ? "Nhập mã xác thực" : "Tạo tài khoản mới")}
                     </p>

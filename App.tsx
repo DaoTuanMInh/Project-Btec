@@ -80,6 +80,11 @@ const App: React.FC = () => {
         navigator.mediaDevices.getUserMedia({ video: true, audio: true })
           .then(stream => {
             setLocalStream(stream);
+
+            // Khôi phục avatar từ Auth User Storage để tránh lỗi trống hình nền sau f5
+            const authUserStore = getUser();
+            if (authUserStore?.avatar) user.avatar = authUserStore.avatar;
+
             setCurrentUser(user);
             setRoomId(savedRoomId);
             setMeetingSettings(settings);
@@ -101,15 +106,26 @@ const App: React.FC = () => {
       // Enforce Auth ID if logged in (Critical for Single Session Enforcement)
       if (authUser?.id) {
         user.id = authUser.id;
+        if (authUser.avatar) user.avatar = authUser.avatar; // Phục hồi Avatar vì session đã purge
       }
 
       let stream = existingStream;
+      // Truncate out dead streams from previous sessions (Only if there are tracks and ALL are ended)
+      if (stream && stream.getTracks().length > 0 && stream.getTracks().every(track => track.readyState === 'ended')) {
+        stream = undefined;
+      }
+
       if (!stream) {
-        // Fallback if no preview stream (rare with hoisted hook)
-        stream = await navigator.mediaDevices.getUserMedia({
-          video: true,
-          audio: true
-        });
+        try {
+          stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+        } catch (mediaErr) {
+          console.warn("Fallback get media failed, trying audio only", mediaErr);
+          try { stream = await navigator.mediaDevices.getUserMedia({ video: false, audio: true }); }
+          catch (audioErr) {
+            console.warn("Audio only failed, joining as spectator", audioErr);
+            stream = new MediaStream(); // Dummy stream
+          }
+        }
       }
       setLocalStream(stream);
       setCurrentUser(user);
@@ -117,15 +133,19 @@ const App: React.FC = () => {
       setMeetingSettings(settings);
       setStatus(MeetingStatus.ACTIVE);
 
+      // User object might contain a 5MB base64 avatar which throws QuotaExceededError in sessionStorage
+      const sessionUser = { ...user };
+      delete sessionUser.avatar;
+
       // Save session
       sessionStorage.setItem('avo-meeting-session', JSON.stringify({
-        user,
+        user: sessionUser,
         roomId: id,
         settings
       }));
-    } catch (err) {
-      alert("Please allow camera and microphone access to join the meeting.");
-      console.error(err);
+    } catch (err: any) {
+      alert("Lỗi tham gia phòng: " + (err?.message || "Vui lòng cho phép quyền Camera/Mic để tiếp tục."));
+      console.error("Join Error:", err);
     }
   };
 
@@ -183,6 +203,7 @@ const App: React.FC = () => {
           onUpdateUser={(u) => {
             setAuthUser(u);
             setCurrentUser({ id: u.id, name: u.username, isHost: currentUser?.isHost, avatar: u.avatar });
+            storeUser(u);
           }}
           resumeRoomId={authUser?.currentRoom}
           onClearResume={() => {

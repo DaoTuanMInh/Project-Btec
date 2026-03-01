@@ -31,6 +31,7 @@ interface UseMeetingSignalingProps {
     isSidebarOpenRef: React.MutableRefObject<boolean>;
     activeTabRef: React.MutableRefObject<string>;
     isSettingsModalOpenRef: React.MutableRefObject<boolean>;
+    processedMsgIdsRef: React.MutableRefObject<Set<string>>;
 
     // WebRTC Functions
     createPeerConnection: any;
@@ -49,7 +50,7 @@ export const useMeetingSignaling = ({
     user, roomId, isCurrentUserHost,
     setPeers, setJoinRequests, setMessages, setReactions, setRoomSettings, setMediaRequestModal, setLogs, setUnreadCount, setUnreadLogsCount,
     isVerified, setIsVerified, isVerifiedRef,
-    isMutedRef, isVideoOffRef, roomSettingsRef, transcriptRef, isSidebarOpenRef, activeTabRef, isSettingsModalOpenRef,
+    isMutedRef, isVideoOffRef, roomSettingsRef, transcriptRef, isSidebarOpenRef, activeTabRef, isSettingsModalOpenRef, processedMsgIdsRef,
     createPeerConnection, processIceQueue, pcRef, iceQueue,
     onLeave, toggleMute, toggleVideo, settings
 }: UseMeetingSignalingProps) => {
@@ -108,8 +109,8 @@ export const useMeetingSignaling = ({
     useEffect(() => {
         const handleSignaling = async (msg: any) => {
             // Filter irrelevant messages
-            if (msg.roomId !== roomId || msg.from === user.id) return;
-            if (msg.to && msg.to !== user.id) return;
+            if (msg.roomId !== roomId || msg.from === userRef.current.id) return;
+            if (msg.to && msg.to !== userRef.current.id) return;
 
             switch (msg.type) {
                 case 'user-update':
@@ -117,11 +118,11 @@ export const useMeetingSignaling = ({
                     break;
 
                 case 'request-join':
-                    if (isCurrentUserHost) {
+                    if (isCurrentUserHostRef.current) {
                         console.log(`📥 Join request from ${msg.payload.userName}. LockRoom = ${roomSettingsRef.current.lockRoom}`);
                         // Auto-reject if room is locked
                         if (roomSettingsRef.current.lockRoom) {
-                            signaling.send('reject-join', user.id, msg.from, roomId, {});
+                            signaling.send('reject-join', userRef.current.id, msg.from, roomId, {});
                             console.log(`🚫 Auto-rejected ${msg.payload.userName} (${msg.from}) - Room is LOCKED`);
                         } else {
                             setJoinRequests((prev: any) => [...prev.filter((u: any) => u.id !== msg.from), { id: msg.from, name: msg.payload.userName, avatar: msg.payload.avatar }]);
@@ -132,7 +133,7 @@ export const useMeetingSignaling = ({
 
                 case 'approve-join':
                     // Wait for offer to confirm entry
-                    if (!isVerified) {
+                    if (!isVerifiedRef.current) {
                         console.log("Join Approved. Sending Join signal...");
                         signaling.send('join', userRef.current.id, undefined, roomId, { userName: userRef.current.name, avatar: userRef.current.avatar, password: settings?.password });
                     }
@@ -148,7 +149,14 @@ export const useMeetingSignaling = ({
                 case 'join':
                     // Password check (only host needs to verify)
                     if (roomSettingsRef.current?.password && msg.payload.password !== roomSettingsRef.current.password) {
-                        if (isCurrentUserHost) (signaling as any).send('kick', user.id, msg.from, roomId, { reason: "Mật khẩu phòng không đúng." });
+                        if (isCurrentUserHostRef.current) (signaling as any).send('kick', userRef.current.id, msg.from, roomId, { reason: "Mật khẩu phòng không đúng." });
+                        return;
+                    }
+
+                    // Guests must wait to be verified before initiating WebRTC handshakes
+                    if (!isVerifiedRef.current) {
+                        console.log("🔒 Guest waiting for verification. Syncing request-join with potential host.");
+                        signaling.send('request-join', userRef.current.id, undefined, roomId, { userName: userRef.current.name, avatar: userRef.current.avatar });
                         return;
                     }
 
@@ -194,10 +202,10 @@ export const useMeetingSignaling = ({
                     break;
 
                 case 'kick':
-                    signaling.send('leave', user.id, undefined, roomId, {});
+                    signaling.send('leave', userRef.current.id, undefined, roomId, {});
                     onLeave();
                     setTimeout(() => {
-                        signaling.send('leave', user.id, undefined, roomId, {}); // Redundancy
+                        signaling.send('leave', userRef.current.id, undefined, roomId, {}); // Redundancy
                         onLeave();
                         showToast(msg.payload.reason || "Bạn đã bị mời ra khỏi phòng.", 'error');
                     }, 100);
@@ -267,7 +275,7 @@ export const useMeetingSignaling = ({
                 case 'offer':
                     if (msg.payload.settings) setRoomSettings(msg.payload.settings);
 
-                    if (!isVerified) {
+                    if (!isVerifiedRef.current) {
                         const s = msg.payload.settings;
                         if (s && (s.requireMic || s.requireCamera)) {
                             const reqs = [];
@@ -282,16 +290,23 @@ export const useMeetingSignaling = ({
                     await handleOffer(msg.from, msg.payload);
 
                     // Always verify after successfully handling offer
-                    if (!isVerified) {
+                    if (!isVerifiedRef.current) {
                         console.log('✅ User verified after handling offer');
                         setIsVerified(true);
                     }
                     break;
 
                 case 'answer':
-                    const pc = pcRef.current[msg.from];
-                    if (pc) {
-                        await pc.setRemoteDescription(new RTCSessionDescription(msg.payload.answer));
+                    const pc2 = pcRef.current[msg.from];
+                    if (pc2) {
+                        try {
+                            await pc2.setRemoteDescription(new RTCSessionDescription(msg.payload.answer));
+                            // Process Ice Queue Right after setting description
+                            setTimeout(async () => {
+                                await processIceQueue(msg.from);
+                            }, 500);
+                        } catch (e) { console.error(e) }
+
                         // Add peer ONLY on Answer
                         setPeers((prev: any) => {
                             const existing = prev.find((p: any) => p.userId === msg.from);
@@ -318,12 +333,19 @@ export const useMeetingSignaling = ({
                     break;
 
                 case 'candidate':
+                    // console.log(`[ICE] 📥 Received candidate from ${msg.from}:`, msg.payload.candidate?.candidate);
                     const targetPc = pcRef.current[msg.from];
                     if (targetPc && targetPc.remoteDescription) {
-                        await targetPc.addIceCandidate(new RTCIceCandidate(msg.payload.candidate));
+                        try {
+                            await targetPc.addIceCandidate(new RTCIceCandidate(msg.payload.candidate));
+                            console.log(`[ICE] ✅ Candidate added to PC for ${msg.from}`);
+                        } catch (e) {
+                            console.error("Direct ICE Candidate Error:", e);
+                        }
                     } else {
                         if (!iceQueue.current[msg.from]) iceQueue.current[msg.from] = [];
                         iceQueue.current[msg.from].push(msg.payload.candidate);
+                        console.log(`[ICE] ⏳ Candidate queued for ${msg.from}`);
                     }
                     break;
 
@@ -338,12 +360,15 @@ export const useMeetingSignaling = ({
                     break;
 
                 case 'chat':
-                    if (String(msg.from) === String(user.id)) return;
+                    if (String(msg.from) === String(userRef.current.id)) return;
+                    if (msg.payload.id && processedMsgIdsRef.current.has(msg.payload.id)) return;
+                    if (msg.payload.id) processedMsgIdsRef.current.add(msg.payload.id);
+
                     setMessages((prev: any) => {
-                        const exists = prev.some((m: any) => m.id === msg.id || (String(m.sender) === String(msg.from) && m.text === msg.payload.text && (new Date().getTime() - new Date(m.timestamp).getTime() < 2000)));
+                        const exists = prev.some((m: any) => m.id === msg.payload.id || (String(m.sender) === String(msg.from) && m.text === msg.payload.text && Math.abs(new Date().getTime() - new Date(m.timestamp).getTime()) < 2000));
                         if (exists) return prev;
                         return [...prev, {
-                            id: msg.id || Math.random().toString(),
+                            id: msg.payload.id || Math.random().toString(),
                             sender: msg.from,
                             text: msg.payload.text || "",
                             timestamp: new Date(msg.payload.timestamp),
@@ -368,13 +393,20 @@ export const useMeetingSignaling = ({
         const unsub = signaling.onMessage(handleSignaling);
 
         // Join logic
-        signaling.joinRoom(roomId, userRef.current.id, userRef.current.name, settings?.password, userRef.current.isHost, settings, userRef.current.avatar);
-        if (!userRef.current.isHost) {
-            console.log("Sending join request...");
-            signaling.send('request-join', userRef.current.id, undefined, roomId, { userName: userRef.current.name, avatar: userRef.current.avatar });
-        } else {
-            signaling.send('join', userRef.current.id, undefined, roomId, { userName: userRef.current.name, avatar: userRef.current.avatar, password: settings?.password });
-        }
+        const initJoin = async () => {
+            try {
+                await signaling.joinRoom(roomId, userRef.current.id, userRef.current.name, settings?.password, userRef.current.isHost, settings, userRef.current.avatar);
+                if (!userRef.current.isHost) {
+                    console.log("Sending join request...");
+                    signaling.send('request-join', userRef.current.id, undefined, roomId, { userName: userRef.current.name, avatar: userRef.current.avatar });
+                } else {
+                    signaling.send('join', userRef.current.id, undefined, roomId, { userName: userRef.current.name, avatar: userRef.current.avatar, password: settings?.password });
+                }
+            } catch (err) {
+                console.error("Failed to connect room signaling:", err);
+            }
+        };
+        initJoin();
 
         return () => {
             unsub();

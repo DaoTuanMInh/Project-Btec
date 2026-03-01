@@ -11,7 +11,8 @@ const RoomSchema = new mongoose.Schema({
         requireMic: { type: Boolean, default: false },
         requireCamera: { type: Boolean, default: false },
         lockRoom: { type: Boolean, default: false },
-        allowReactions: { type: Boolean, default: true }
+        allowReactions: { type: Boolean, default: true },
+        autoCloseWhenEmpty: { type: Boolean, default: true }
     },
     participants: [{
         userId: String,

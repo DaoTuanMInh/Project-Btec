@@ -24,3 +24,8 @@ dist-ssr
 *.sw?
 .env
 /uploads/
+
+# Custom Excludes
+clearDb.js
+ngrok.exe
+*.pem

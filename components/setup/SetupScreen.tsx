@@ -48,6 +48,7 @@ const SetupScreen: React.FC<Props> = ({ onJoin, setupMedia, initialName = "", us
     waitingRoom: false,
     lockRoom: false,
     allowReactions: true,
+    autoCloseWhenEmpty: true,
     password: ''
   });
 
@@ -116,8 +117,8 @@ const SetupScreen: React.FC<Props> = ({ onJoin, setupMedia, initialName = "", us
       try {
         const { signaling } = await import('../../services/signaling');
         // Check room with userId to detect if Host
-        const { exists, requiresPassword, valid, locked, isHost } = await signaling.checkRoom(room, joinPassword, userId);
-        console.log("🔍 Room Check Result:", { exists, requiresPassword, valid, locked, isHost, inputPass: joinPassword });
+        const { exists, requiresPassword, valid, locked, isHost, isEmpty } = await signaling.checkRoom(room, joinPassword, userId);
+        console.log("🔍 Room Check Result:", { exists, requiresPassword, valid, locked, isHost, isEmpty, inputPass: joinPassword });
 
         if (!exists) return showToast("Phòng không tồn tại hoặc đã kết thúc.", 'error');
         if (locked) return showToast("🔒 Phòng đã bị khóa. Không thể tham gia.", 'error');

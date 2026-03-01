@@ -214,6 +214,28 @@ const JoinForm: React.FC<JoinFormProps> = ({
                                         <span className="text-slate-500">Cho phép Emote</span>
                                     </div>
                                 </label>
+
+                                <label className="col-span-2 flex items-center justify-between p-3 bg-red-500/10 rounded-lg border border-red-500/20 cursor-pointer hover:bg-red-500/20 transition-colors">
+                                    <div className="text-xs">
+                                        <span className="block font-medium text-red-400">Tự động đóng phòng</span>
+                                        <span className="text-red-500/70">Tắt phòng và lưu lịch sử khi không còn ai</span>
+                                    </div>
+                                    <div className="relative inline-block w-10 mr-2 align-middle select-none transition duration-200 ease-in">
+                                        <input
+                                            type="checkbox"
+                                            name="toggle"
+                                            id="autoClose"
+                                            checked={joinSettings.autoCloseWhenEmpty !== false} // True by default
+                                            onChange={e => setJoinSettings({ ...joinSettings, autoCloseWhenEmpty: e.target.checked })}
+                                            className="toggle-checkbox absolute block w-5 h-5 rounded-full bg-white border-4 appearance-none cursor-pointer transition-transform duration-200 ease-in-out border-slate-500"
+                                            style={{
+                                                transform: joinSettings.autoCloseWhenEmpty !== false ? 'translateX(100%)' : 'translateX(0)',
+                                                borderColor: joinSettings.autoCloseWhenEmpty !== false ? '#3b82f6' : '#64748b'
+                                            }}
+                                        />
+                                        <label htmlFor="autoClose" className={`toggle-label block overflow-hidden h-5 rounded-full bg-slate-700 cursor-pointer transition-colors duration-200 ${joinSettings.autoCloseWhenEmpty !== false ? 'bg-blue-500' : 'bg-slate-600'}`}></label>
+                                    </div>
+                                </label>
                             </div>
                         </div>
                     )}

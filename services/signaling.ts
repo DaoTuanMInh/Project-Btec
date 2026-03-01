@@ -1,6 +1,6 @@
 import { io, Socket } from "socket.io-client";
 import { SignalingMessage } from '../types';
-import { clearSession } from './authService';
+import { clearSession, getToken } from './authService';
 
 // Determine the signaling server URL based on current host
 // This allows it to work on localhost and LAN IP (e.g. 192.168.x.x:3001)
@@ -75,10 +75,10 @@ class SignalingService {
   }
 
   // Check if room exists before joining
-  checkRoom(roomId: string, password?: string, userId?: string): Promise<{ exists: boolean; requiresPassword: boolean; valid: boolean; locked: boolean; isHost?: boolean }> {
+  checkRoom(roomId: string, password?: string, userId?: string): Promise<{ exists: boolean; requiresPassword: boolean; valid: boolean; locked: boolean; isHost?: boolean; isEmpty?: boolean }> {
     return new Promise((resolve) => {
       // Timeout protection
-      const timer = setTimeout(() => resolve({ exists: false, requiresPassword: false, valid: false, locked: false }), 2000);
+      const timer = setTimeout(() => resolve({ exists: false, requiresPassword: false, valid: false, locked: false, isEmpty: true }), 2000);
 
       this.socket.emit('check-room', roomId, password, userId, (response: any) => {
         clearTimeout(timer);
@@ -89,13 +89,17 @@ class SignalingService {
 
   async joinRoom(roomId: string, userId: string, userName: string, password?: string, isHost: boolean = false, settings?: any, avatar?: string) {
     try {
-      // ZERO TRUST: Authenticate First to get Session Token
       console.log(`Requesting Zero Trust Access Token...`);
 
-      // Use relative path - The Server serves both Web and API now.
+      const authToken = getToken(); // Lấy JWT từ session
+      if (!authToken) throw new Error('Chưa đăng nhập hoặc phiên hết hạn');
+
       const response = await fetch(`/api/token`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${authToken}`  // ← fix: gửi JWT token
+        },
         body: JSON.stringify({
           roomId,
           userId,
@@ -104,27 +108,31 @@ class SignalingService {
       });
 
       if (!response.ok) {
-        throw new Error(`Server returned ${response.status} ${response.statusText}`);
+        const errData = await response.json().catch(() => ({}));
+        throw new Error(errData.error || `Server trả ${response.status}`);
       }
 
       const data = await response.json();
-      if (!data.token) {
-        throw new Error("Failed to obtain access token (Empty response)");
-      }
+      if (!data.token) throw new Error('Không nhận được access token');
 
-      this.currentUserToken = data.token; // Store token
-      console.log("Token obtained. Joining Secure Socket Room...");
+      this.currentUserToken = data.token;
+      console.log('Token obtained. Joining Secure Socket Room...');
 
-      this.socket.emit('join-room', roomId, userId, userName, isHost, settings, data.token, avatar, (ack: any) => {
-        if (ack && ack.error) {
-          console.error("Join Denied by Zero Trust Policy:", ack.error);
-          alert(ack.error);
-        }
+      return new Promise<void>((resolve, reject) => {
+        this.socket.emit('join-room', roomId, userId, userName, isHost, settings, data.token, avatar, (ack: any) => {
+          if (ack && ack.error) {
+            console.error('Join Denied by Zero Trust Policy:', ack.error);
+            alert(ack.error);
+            reject(new Error(ack.error));
+          } else {
+            resolve();
+          }
+        });
       });
-    } catch (err) {
-      console.error("Zero Trust Auth Failed:", err);
-      // Detailed user instruction for self-signed certs
-      alert(`Lỗi kết nối bảo mật (Zero Trust)!\n\nNguyên nhân có thể do trình duyệt chặn chứng chỉ HTTPS tự tạo của Server.\n\nHãy mở tab mới, truy cập: https://localhost:3001\nChọn "Advanced" -> "Proceed..." để chấp nhận chứng chỉ, sau đó quay lại đây thử lại.`);
+    } catch (err: any) {
+      console.error('Zero Trust Auth Failed:', err);
+      alert(`Lỗi tham gia phòng!\n\n${err.message || 'Không thể kết nối với server.'}\n\nVui lòng tải lại trang và thử lại.`);
+      throw err;
     }
   }
 

@@ -12,7 +12,11 @@ export const storeToken = (token: string) => {
 };
 
 export const storeUser = (user: { id: string, username: string, email?: string, currentRoom?: string, avatar?: string }) => {
-  sessionStorage.setItem('avo_auth_user', JSON.stringify(user));
+  try {
+    sessionStorage.setItem('avo_auth_user', JSON.stringify(user));
+  } catch (err) {
+    console.warn("Storage warning (auth):", err);
+  }
 };
 
 export const getUser = () => {

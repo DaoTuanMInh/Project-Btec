@@ -36,11 +36,18 @@ const ProfileModal: React.FC<ProfileModalProps> = ({ isOpen, onClose, user, onUp
     const handleUpdateProfile = async () => {
         setLoading(true);
         try {
-            const updatedUser = await updateProfile(user.id, avatarUrl);
-            onUpdateUser(updatedUser); // Update parent state
+            // Avatar đã được upload khi chọn file, chỉ cần lưu thông tin còn lại
+            const res = await fetch('/api/user/update-profile', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ userId: user.id, avatar: avatarUrl })
+            });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error);
+            onUpdateUser(data.user);
             showToast("Cập nhật thông tin thành công!", 'success');
         } catch (e: any) {
-            showToast(e.message, 'error');
+            showToast(e.message || 'Lỗi khi lưu thông tin', 'error');
         } finally { setLoading(false); }
     };
 
@@ -49,7 +56,7 @@ const ProfileModal: React.FC<ProfileModalProps> = ({ isOpen, onClose, user, onUp
         setLoading(true);
         try {
             const res = await changePassword(user.id, oldPass, newPass);
-            showToast(res.message, 'success');
+            showToast(res.message || 'Đổi mật khẩu thành công!', 'success');
             setOldPass(''); setNewPass(''); setConfirmPass('');
         } catch (e: any) {
             showToast(e.message, 'error');
@@ -134,7 +141,7 @@ const ProfileModal: React.FC<ProfileModalProps> = ({ isOpen, onClose, user, onUp
                             <SidebarItem active={activeTab === 'info'} onClick={() => setActiveTab('info')} icon={UserIcon} label="Thông tin" isMobileHorizontal />
                             <SidebarItem active={activeTab === 'history'} onClick={() => setActiveTab('history')} icon={History} label="Lịch sử họp" isMobileHorizontal />
                             <SidebarItem active={activeTab === 'security'} onClick={() => setActiveTab('security')} icon={Lock} label="Bảo mật" isMobileHorizontal />
-                            <SidebarItem active={activeTab === 'contact'} onClick={() => setActiveTab('contact')} icon={Mail} label="Liên hệ" isMobileHorizontal />
+                            <SidebarItem active={activeTab === 'contact'} onClick={() => setActiveTab('contact')} icon={Mail} label="Đổi email" isMobileHorizontal />
                         </div>
 
                         {/* Content Area */}
@@ -158,7 +165,7 @@ const ProfileModal: React.FC<ProfileModalProps> = ({ isOpen, onClose, user, onUp
                                         </div>
                                         <div className="text-center">
                                             <h3 className="text-lg font-bold text-white">{user.username}</h3>
-                                            <p className="text-sm text-slate-400">ID: {user.id}</p>
+                                            <p className="text-xs text-slate-500">{user.email}</p>
                                         </div>
                                     </div>
 
@@ -169,40 +176,89 @@ const ProfileModal: React.FC<ProfileModalProps> = ({ isOpen, onClose, user, onUp
                                                 id="avatar-upload"
                                                 accept="image/*"
                                                 className="hidden"
-                                                onChange={(e) => {
+                                                onChange={async (e) => {
                                                     const file = e.target.files?.[0];
-                                                    if (file) {
-                                                        if (file.size > 2 * 1024 * 1024) {
-                                                            showToast("Ảnh quá lớn! Vui lòng chọn ảnh dưới 2MB", 'error');
-                                                            return;
-                                                        }
-                                                        const reader = new FileReader();
-                                                        reader.onloadend = () => {
-                                                            setAvatarUrl(reader.result as string);
-                                                        };
-                                                        reader.readAsDataURL(file);
+                                                    if (!file) return;
+                                                    if (file.size > 5 * 1024 * 1024) {
+                                                        showToast("Ảnh quá lớn! Vui lòng chọn ảnh dưới 5MB", 'error');
+                                                        return;
                                                     }
+                                                    // Resize and Compress Image using Canvas before Base64
+                                                    const objectUrl = URL.createObjectURL(file);
+                                                    const img = new Image();
+                                                    img.onload = async () => {
+                                                        const canvas = document.createElement('canvas');
+                                                        const MAX_WIDTH = 150;
+                                                        const MAX_HEIGHT = 150;
+                                                        let width = img.width;
+                                                        let height = img.height;
+
+                                                        if (width > height) {
+                                                            if (width > MAX_WIDTH) {
+                                                                height = Math.round((height *= MAX_WIDTH / width));
+                                                                width = MAX_WIDTH;
+                                                            }
+                                                        } else {
+                                                            if (height > MAX_HEIGHT) {
+                                                                width = Math.round((width *= MAX_HEIGHT / height));
+                                                                height = MAX_HEIGHT;
+                                                            }
+                                                        }
+
+                                                        canvas.width = width;
+                                                        canvas.height = height;
+                                                        const ctx = canvas.getContext('2d');
+                                                        ctx?.drawImage(img, 0, 0, width, height);
+
+                                                        // Get compressed Base64 string (Quality 0.8)
+                                                        const base64Avatar = canvas.toDataURL('image/jpeg', 0.8);
+                                                        URL.revokeObjectURL(objectUrl);
+
+                                                        setLoading(true);
+                                                        try {
+                                                            const res = await fetch('/api/user/update-profile', {
+                                                                method: 'POST',
+                                                                headers: {
+                                                                    'Content-Type': 'application/json',
+                                                                    'ngrok-skip-browser-warning': 'true'
+                                                                },
+                                                                body: JSON.stringify({ userId: user.id, avatar: base64Avatar, username: user.username })
+                                                            });
+
+                                                            const contentType = res.headers.get("content-type");
+                                                            if (contentType && contentType.indexOf("application/json") !== -1) {
+                                                                const data = await res.json();
+                                                                if (!res.ok) throw new Error(data.error || 'Có lỗi khi cập nhật profile');
+
+                                                                setAvatarUrl(base64Avatar);
+                                                                onUpdateUser(data.user);
+                                                                showToast('Ảnh đại diện đã được cập nhật!', 'success');
+                                                            } else {
+                                                                const textData = await res.text();
+                                                                console.error("API trả về HTML thay vì JSON:", textData);
+                                                                throw new Error("Server gửi về dữ liệu sai định dạng (có thể bạn chọn ảnh quá lớn)");
+                                                            }
+                                                        } catch (err: any) {
+                                                            showToast(err.message || 'Lỗi cập nhật ảnh đại diện', 'error');
+                                                        } finally {
+                                                            setLoading(false);
+                                                        }
+                                                    };
+                                                    img.src = objectUrl;
                                                 }}
                                             />
                                             <label
                                                 htmlFor="avatar-upload"
                                                 className="cursor-pointer bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded-xl font-medium flex items-center gap-2 transition-all"
                                             >
-                                                <Camera size={18} /> Chọn ảnh từ máy
+                                                {loading ? 'Đang upload...' : <><Camera size={18} /> Chọn ảnh từ máy</>}
                                             </label>
-                                            <p className="text-xs text-slate-500">Chọn ảnh từ máy tính (tối đa 2MB)</p>
+                                            <p className="text-xs text-slate-500">Chọn ảnh từ máy tính (tối đa 5MB) — upload tự động</p>
                                         </div>
 
 
                                     </div>
 
-                                    <button
-                                        onClick={handleUpdateProfile}
-                                        disabled={loading}
-                                        className="w-full bg-blue-600 hover:bg-blue-500 text-white rounded-xl py-2 font-bold flex items-center justify-center gap-2 transition-all"
-                                    >
-                                        {loading ? "Đang lưu..." : <><Save size={18} /> Lưu thay đổi</>}
-                                    </button>
                                 </div>
                             )}
 

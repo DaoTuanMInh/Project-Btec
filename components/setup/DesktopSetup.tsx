@@ -12,9 +12,9 @@ const DesktopSetup: React.FC<DesktopSetupProps> = ({ joinFormProps, mediaPreview
     return (
         <div className="flex flex-row items-center justify-center gap-12 w-full max-w-6xl">
             <div className="flex-1 w-full max-w-md flex flex-col">
-                <div className="mb-8">
-                    <h1 className="text-5xl font-extrabold mb-2 bg-gradient-to-r from-blue-400 to-indigo-600 bg-clip-text text-transparent">AVO</h1>
-                    <p className="text-slate-400 text-lg">Secure, high-performance video meetings with end-to-end encryption.</p>
+                <div className="mb-8 flex flex-col items-center text-center">
+                    <img src="/logoAVO.png" alt="AVO Logo" className="w-24 h-24 object-contain rounded-full shadow-lg mb-4" />
+                    <p className="text-slate-400 text-lg">Secure, high-performance video meetings.</p>
                 </div>
 
                 <JoinForm {...joinFormProps} />

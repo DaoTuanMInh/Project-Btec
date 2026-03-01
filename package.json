@@ -5,6 +5,7 @@
   "dependencies": {
     "@vitejs/plugin-basic-ssl": "^2.1.4",
     "bcryptjs": "^3.0.3",
+    "body-parser": "^2.2.2",
     "clsx": "^2.0.0",
     "cors": "^2.8.6",
     "crypto-js": "^4.1.1",
@@ -15,6 +16,7 @@
     "lucide-react": "^0.263.1",
     "mongoose": "^9.1.6",
     "multer": "^2.0.2",
+    "node-cron": "^4.2.1",
     "nodemailer": "^8.0.1",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",

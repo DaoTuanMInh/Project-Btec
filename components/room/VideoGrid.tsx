@@ -13,39 +13,24 @@ interface VideoTileProps {
 
 const VideoTile: React.FC<VideoTileProps> = ({ peer, isBlurred, isPinned, onPin, className }) => {
   const videoRef = useRef<HTMLVideoElement>(null);
-  const [isVideoReady, setIsVideoReady] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
 
   useEffect(() => {
     if (videoRef.current && peer.stream) {
-      videoRef.current.srcObject = peer.stream;
-      setIsVideoReady(false); // Reset when stream changes
-
-      // Check if stream is active
-      if (!peer.stream.active) {
-        console.warn("Stream is inactive!");
-      }
-
-      // Force play and track when video is actually playing
-      const playPromise = videoRef.current.play();
-      if (playPromise !== undefined) {
-        playPromise
-          .then(() => {
-            setIsVideoReady(true);
-          })
-          .catch(error => {
-            console.error("Auto-play failed:", error);
-            setIsVideoReady(true); // Fallback to attempted play
-          });
+      if (videoRef.current.srcObject !== peer.stream) {
+        videoRef.current.srcObject = peer.stream;
+        console.log("Stream attached for peer:", peer.userName);
       }
     } else {
-      setIsVideoReady(false);
+      if (videoRef.current && videoRef.current.srcObject !== null) {
+        videoRef.current.srcObject = null;
+      }
     }
-  }, [peer.stream, peer.videoOff]);
+  }, [peer.stream]);
 
   // Audio Detection for Speaking Effect
   useEffect(() => {
-    if (!peer.stream || peer.muted) {
+    if (!peer.stream || peer.muted || peer.stream.getAudioTracks().length === 0) {
       setIsSpeaking(false);
       return;
     }
@@ -91,7 +76,7 @@ const VideoTile: React.FC<VideoTileProps> = ({ peer, isBlurred, isPinned, onPin,
   }, [peer.stream, peer.muted]);
 
   // Check if we should show the avatar placeholder
-  const shouldShowAvatar = peer.videoOff || !peer.stream || !isVideoReady;
+  const shouldShowAvatar = peer.videoOff || !peer.stream;
 
   return (
     <div className={`relative group bg-black rounded-xl overflow-hidden shadow-lg border ${peer.isLocal ? 'border-slate-700' : 'border-slate-800'} transition-all duration-300 ${isSpeaking && shouldShowAvatar ? 'ring-2 ring-blue-500/50 shadow-[0_0_20px_rgba(59,130,246,0.2)]' : ''} flex items-center justify-center ${className || 'aspect-video'}`}>
@@ -100,6 +85,9 @@ const VideoTile: React.FC<VideoTileProps> = ({ peer, isBlurred, isPinned, onPin,
         autoPlay
         playsInline
         muted={peer.isLocal}
+        onLoadedMetadata={() => {
+          videoRef.current?.play().catch(e => console.warn(e));
+        }}
         className={`w-full h-full ${isPinned ? 'object-contain' : 'object-cover'} transition-all duration-500 ${!peer.isScreenShare ? 'scale-x-[-1]' : ''} ${isBlurred && peer.isLocal ? 'blur-xl scale-110' : ''} ${shouldShowAvatar ? 'hidden' : 'block'}`}
       />
 

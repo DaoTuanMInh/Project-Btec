@@ -13,6 +13,7 @@ interface UseWebRTCProps {
     transcriptRef: React.MutableRefObject<string[]>;
     isSidebarOpenRef: React.MutableRefObject<boolean>;
     activeTabRef: React.MutableRefObject<'chat' | 'participants' | 'requests'>;
+    processedMsgIdsRef: React.MutableRefObject<Set<string>>;
 }
 
 export const useWebRTC = ({
@@ -24,7 +25,8 @@ export const useWebRTC = ({
     setUnreadCount,
     transcriptRef,
     isSidebarOpenRef,
-    activeTabRef
+    activeTabRef,
+    processedMsgIdsRef
 }: UseWebRTCProps) => {
     const { showToast } = useToast();
 
@@ -45,8 +47,11 @@ export const useWebRTC = ({
             try {
                 const msg = JSON.parse(event.data);
                 if (msg.type === 'chat') {
+                    if (msg.id && processedMsgIdsRef.current.has(msg.id)) return;
+                    if (msg.id) processedMsgIdsRef.current.add(msg.id);
+
                     setMessages(prev => {
-                        const exists = prev.some(m => m.id === msg.id);
+                        const exists = prev.some(m => m.id === msg.id || (String(m.sender) === String(remoteId) && m.text === msg.text && Math.abs(new Date().getTime() - new Date(m.timestamp).getTime()) < 2000));
                         if (exists) return prev;
                         return [...prev, {
                             id: msg.id || Math.random().toString(),
@@ -68,16 +73,42 @@ export const useWebRTC = ({
                 console.error("Failed to parse DataChannel message", e);
             }
         };
-    }, [setMessages, transcriptRef, isSidebarOpenRef, activeTabRef, setUnreadCount]);
+    }, [setMessages, transcriptRef, isSidebarOpenRef, activeTabRef, setUnreadCount, processedMsgIdsRef]);
 
     const createPeerConnection = useCallback((remoteId: string, remoteName: string, isOfferer: boolean) => {
         if (pcRef.current[remoteId] && pcRef.current[remoteId].signalingState !== 'closed') {
             return pcRef.current[remoteId];
         }
 
-        // Config STUN Servers
+        // Config STUN/TURN Servers for NAT Traversal
         const pc = new RTCPeerConnection({
-            iceServers: [{ urls: 'stun:stun.l.google.com:19302' }]
+            iceServers: [
+                { urls: 'stun:stun.l.google.com:19302' },
+                { urls: 'stun:stun1.l.google.com:19302' },
+                { urls: 'stun:stun2.l.google.com:19302' },
+                { urls: 'stun:stun3.l.google.com:19302' },
+                { urls: 'stun:stunr.metered.ca:80' },
+                {
+                    urls: "turn:global.relay.metered.ca:80",
+                    username: "99b2cad2d01fe8519d64d80d",
+                    credential: "yxInLub4NbpSjLFM"
+                },
+                {
+                    urls: "turn:global.relay.metered.ca:80?transport=tcp",
+                    username: "99b2cad2d01fe8519d64d80d",
+                    credential: "yxInLub4NbpSjLFM"
+                },
+                {
+                    urls: "turn:global.relay.metered.ca:443",
+                    username: "99b2cad2d01fe8519d64d80d",
+                    credential: "yxInLub4NbpSjLFM"
+                },
+                {
+                    urls: "turns:global.relay.metered.ca:443?transport=tcp",
+                    username: "99b2cad2d01fe8519d64d80d",
+                    credential: "yxInLub4NbpSjLFM"
+                }
+            ]
         });
 
         if (isOfferer) {
@@ -91,7 +122,10 @@ export const useWebRTC = ({
 
         pc.onicecandidate = (event) => {
             if (event.candidate) {
+                console.log(`[ICE] 📤 Sending candidate to ${remoteId}:`, event.candidate.candidate);
                 signaling.send('candidate', user.id, remoteId, roomId, { candidate: event.candidate });
+            } else {
+                console.log(`[ICE] 🏁 Finished gathering local candidates for ${remoteId}`);
             }
         };
 
@@ -118,11 +152,20 @@ export const useWebRTC = ({
         };
 
         pc.oniceconnectionstatechange = () => {
+            console.log(`[WebRTC ICE State] ${remoteName} (${remoteId}) changed to: ${pc.iceConnectionState}`);
+
             if (pc.iceConnectionState === 'failed') {
-                console.error("ICE Connection Failed with", remoteId);
-                showToast(`Mất kết nối với ${remoteName}. Đang thử lại...`, 'error');
-                pc.restartIce();
+                console.error("ICE Connection Failed with", remoteId, " - NAT Traversal (TURN) is likely blocked or unavailable.");
+                showToast(`Kết nối video với ${remoteName} thất bại (Gặp tường lửa/NAT cứng).`, 'error');
+            } else if (pc.iceConnectionState === 'connected') {
+                console.log(`✅ ICE Connection Established directly with ${remoteName}`);
+            } else if (pc.iceConnectionState === 'disconnected') {
+                console.warn(`⚠️ ICE Connection Disconnected with ${remoteName} - Mạng có thể đang chập chờn.`);
             }
+        };
+
+        pc.onconnectionstatechange = () => {
+            console.log(`[WebRTC Peer State] ${remoteName} (${remoteId}) connection state: ${pc.connectionState}`);
         };
 
         // Add local tracks
@@ -138,7 +181,13 @@ export const useWebRTC = ({
         if (pc && pc.remoteDescription && iceQueue.current[remoteId]) {
             while (iceQueue.current[remoteId].length > 0) {
                 const candidate = iceQueue.current[remoteId].shift();
-                if (candidate) await pc.addIceCandidate(new RTCIceCandidate(candidate));
+                if (candidate) {
+                    try {
+                        await pc.addIceCandidate(new RTCIceCandidate(candidate));
+                    } catch (e) {
+                        console.error("Error adding queued ICE Candidate:", e);
+                    }
+                }
             }
         }
     };

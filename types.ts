@@ -48,6 +48,7 @@ export interface MeetingSettings {
   waitingRoom: boolean;
   allowReactions: boolean; // New setting
   lockRoom: boolean;
+  autoCloseWhenEmpty?: boolean;
 }
 
 export interface ReactionItem {

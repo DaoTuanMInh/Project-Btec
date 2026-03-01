@@ -29,6 +29,7 @@ const MeetingRoom: React.FC<Props> = ({ user, roomId, localStream, onLeave, sett
   const state = useMeetingState(user, settings);
   const transcriptRef = useRef<string[]>([]);
   const dataChannelsRef = useRef<Record<string, RTCDataChannel>>({}); // E2EE Chat
+  const processedMsgIdsRef = useRef(new Set<string>()); // Anti-spam/dedup tracking
 
   // 2. WebRTC Core
   const rtc = useWebRTC({
@@ -38,7 +39,8 @@ const MeetingRoom: React.FC<Props> = ({ user, roomId, localStream, onLeave, sett
     setUnreadCount: state.setUnreadCount,
     transcriptRef,
     isSidebarOpenRef: state.isSidebarOpenRef,
-    activeTabRef: state.activeTabRef
+    activeTabRef: state.activeTabRef,
+    processedMsgIdsRef
   });
 
   // NOTE: Connecting dataChannelsRef manually since it was tricky to extract fully without circular deps
@@ -201,6 +203,7 @@ const MeetingRoom: React.FC<Props> = ({ user, roomId, localStream, onLeave, sett
     isMutedRef, isVideoOffRef, roomSettingsRef: state.roomSettingsRef, transcriptRef,
     isSidebarOpenRef: state.isSidebarOpenRef, activeTabRef: state.activeTabRef,
     isSettingsModalOpenRef: state.isSettingsModalOpenRef,
+    processedMsgIdsRef,
     createPeerConnection: rtc.createPeerConnection, processIceQueue: rtc.processIceQueue,
     pcRef: rtc.pcRef, iceQueue: rtc.iceQueue,
     onLeave, toggleMute, toggleVideo, settings
@@ -319,10 +322,7 @@ const MeetingRoom: React.FC<Props> = ({ user, roomId, localStream, onLeave, sett
         {/* HEADER */}
         <header onClick={e => e.stopPropagation()} className={`h-16 md:h-20 px-4 md:px-6 flex items-center justify-between glass-effect z-20 transition-all ${!state.showControls ? '-mt-16 md:-mt-20' : ''}`}>
           <div className="flex gap-2 md:gap-3 items-center min-w-0">
-            <img src="/logoAVO.png" alt="Logo" className="w-9 h-9 md:w-13 md:h-13 object-contain rounded-full shadow-sm shrink-0" onError={(e) => {
-              e.currentTarget.style.display = 'none';
-              e.currentTarget.parentElement?.insertAdjacentHTML('afterbegin', '<div class="text-white font-bold bg-blue-600 w-8 h-8 md:w-11 md:h-11 flex items-center justify-center rounded-xl shrink-0">A</div>');
-            }} />
+            <img src="/logoAVO.png" alt="Logo" className="w-9 h-9 md:w-13 md:h-13 object-contain rounded-full shadow-sm shrink-0" />
             <div className="min-w-0">
               <h2 className="text-[10px] md:text-sm font-bold text-slate-200 flex items-center gap-1.5 md:gap-2">
                 <span className="truncate">AVO MEETING</span>
@@ -372,8 +372,29 @@ const MeetingRoom: React.FC<Props> = ({ user, roomId, localStream, onLeave, sett
         <VideoGrid peers={state.peers} isLocalBlurred={media.isBlurred} onToggleFullScreen={() => document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen()} />
 
         {/* CONTROLS */}
-        <div onClick={e => e.stopPropagation()} className={`fixed bottom-6 left-0 right-0 z-50 flex justify-center transition-all px-4 ${!state.showControls ? 'translate-y-[150%]' : ''}`}>
-          <div className="flex gap-2 md:gap-3 p-2 md:p-3 glass-effect rounded-[2rem] bg-slate-900/80 max-w-full overflow-x-auto no-scrollbar shadow-2xl border border-white/5">
+        <div onClick={e => e.stopPropagation()} className={`fixed bottom-6 left-0 right-0 z-50 flex flex-col items-center gap-4 transition-all px-4 ${!state.showControls ? 'translate-y-[150%]' : ''}`}>
+
+          {/* Reaction Menu */}
+          <div className={`transition-all duration-300 ease-out origin-bottom ${state.isReactionMenuOpen ? 'opacity-100 scale-100 translate-y-0 pointer-events-auto' : 'opacity-0 scale-90 translate-y-4 pointer-events-none'}`}>
+            <div className="bg-slate-800 p-2 md:p-3 rounded-full flex gap-2 md:gap-3 shadow-[0_0_30px_rgba(0,0,0,0.5)] border border-white/10 backdrop-blur-xl mb-2">
+              {['❤️', '👍', '😂', '😮', '👏', '🎉'].map((e, i) => (
+                <button
+                  key={e}
+                  onClick={() => {
+                    const reactId = Math.random().toString();
+                    signaling.send('reaction', user.id, undefined, roomId, { emoji: e, senderName: user.name });
+                    state.setReactions(prev => [...prev.filter(r => r.senderId !== user.id), { id: reactId, senderId: user.id, senderName: user.name, emoji: e, timestamp: Date.now() }]);
+                    state.setIsReactionMenuOpen(false); // Đóng menu sau khi nhấn
+                  }}
+                  className="w-10 h-10 md:w-12 md:h-12 hover:bg-white/10 rounded-full text-2xl md:text-3xl transition-transform hover:scale-125 focus:outline-none"
+                >
+                  {e}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="flex gap-2 md:gap-3 p-2 md:p-3 glass-effect rounded-[2rem] bg-slate-900/80 max-w-full overflow-x-auto no-scrollbar shadow-2xl border border-white/5 pointer-events-auto">
             <button onClick={() => toggleMute()} className={`w-10 h-10 md:w-12 md:h-12 shrink-0 rounded-full flex items-center justify-center transition-colors ${isMuted ? 'bg-red-500 text-white' : 'bg-slate-800 text-slate-200 hover:bg-slate-700'}`}>{isMuted ? <MicOff size={20} /> : <Mic size={20} />}</button>
             <button onClick={() => toggleVideo()} className={`w-10 h-10 md:w-12 md:h-12 shrink-0 rounded-full flex items-center justify-center transition-colors ${isVideoOff ? 'bg-red-500 text-white' : 'bg-slate-800 text-slate-200 hover:bg-slate-700'}`}>{isVideoOff ? <VideoOff size={20} /> : <Video size={20} />}</button>
             <button onClick={() => media.setIsBlurred(!media.isBlurred)} className={`w-10 h-10 md:w-12 md:h-12 shrink-0 rounded-full flex items-center justify-center transition-colors ${media.isBlurred ? 'bg-emerald-600 text-white' : 'bg-slate-800 text-slate-200 hover:bg-slate-700'}`}>{media.isBlurred ? <EyeOff size={20} /> : <Eye size={20} />}</button>
@@ -381,12 +402,7 @@ const MeetingRoom: React.FC<Props> = ({ user, roomId, localStream, onLeave, sett
 
             {state.roomSettings.allowReactions && (
               <div className="relative shrink-0">
-                <button onClick={() => state.setIsReactionMenuOpen(!state.isReactionMenuOpen)} className="w-10 h-10 md:w-12 md:h-12 bg-slate-800 rounded-full flex items-center justify-center text-yellow-400 hover:bg-slate-700 transition-colors"><Smile size={20} /></button>
-                {state.isReactionMenuOpen && (
-                  <div className="absolute bottom-14 md:bottom-16 left-1/2 -translate-x-1/2 bg-slate-800 p-1.5 md:p-2 rounded-full flex gap-1 shadow-2xl border border-white/10 backdrop-blur-xl">
-                    {['❤️', '👍', '😂', '😮', '👏', '🎉'].map((e, i) => <button key={e} onClick={() => sendReaction(e, i)} className="w-8 h-8 md:w-10 md:h-10 hover:bg-white/10 rounded-full text-lg md:text-xl transition-transform hover:scale-125">{e}</button>)}
-                  </div>
-                )}
+                <button onClick={() => state.setIsReactionMenuOpen(!state.isReactionMenuOpen)} className={`w-10 h-10 md:w-12 md:h-12 rounded-full flex items-center justify-center transition-all ${state.isReactionMenuOpen ? 'bg-yellow-500/20 text-yellow-400' : 'bg-slate-800 text-yellow-400 hover:bg-slate-700'}`}><Smile size={20} /></button>
               </div>
             )}
 
@@ -416,7 +432,7 @@ const MeetingRoom: React.FC<Props> = ({ user, roomId, localStream, onLeave, sett
           // E2EE Broadcast
           Object.values(rtc.dataChannelsRef.current).forEach(dc => dc.readyState === 'open' && dc.send(JSON.stringify(msg)));
           // Signaling Backup + Server Persistence
-          signaling.send('chat', user.id, undefined, roomId, { text: t, timestamp: msg.timestamp, userName: user.name });
+          signaling.send('chat', user.id, undefined, roomId, { text: t, timestamp: msg.timestamp, userName: user.name, id: msg.id });
 
           state.setMessages(p => [...p, { id: msg.id, sender: user.id, userName: user.name, text: t, timestamp: msg.timestamp }]);
           state.setUnreadCount(0); // Clear on send

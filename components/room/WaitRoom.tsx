@@ -26,10 +26,7 @@ const WaitRoom: React.FC<Props> = ({ user, localStream, onExit, isMicOn, isCamer
         <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center p-6">
             <div className="max-w-md w-full bg-slate-900 rounded-2xl border border-slate-800 shadow-2xl p-6 text-center">
                 <div className="w-28 h-28 mx-auto mb-8 relative">
-                    <img src="/logoAVO.png" alt="Logo" className="w-full h-full object-contain rounded-full shadow-xl animate-pulse" onError={(e) => {
-                        e.currentTarget.style.display = 'none';
-                        e.currentTarget.parentElement?.insertAdjacentHTML('afterbegin', '<div class="w-16 h-16 bg-blue-600 rounded-full flex items-center justify-center mx-auto mb-4 animate-pulse shadow-lg shadow-blue-500/20"><i class="fas fa-lock text-2xl text-white"></i></div>');
-                    }} />
+                    <img src="/logoAVO.png" alt="Logo" className="w-full h-full object-contain rounded-full shadow-xl animate-pulse" />
                 </div>
                 <h2 className="text-2xl font-bold text-white mb-2">Đang chờ sự chấp thuận</h2>
                 <p className="text-slate-400 mb-8">Chủ phòng đã nhận được yêu cầu. Vui lòng đợi trong giây lát...</p>
