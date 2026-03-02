@@ -37,8 +37,51 @@ class SignalingService {
 
     this.socket.on('force-logout', (msg: any) => {
       console.warn("Force Logout:", msg.reason);
-      alert("Tài khoản của bạn đã được đăng nhập ở nơi khác. Vui lòng đăng nhập lại.");
-      clearSession();
+
+      // Show a beautiful overlay notification instead of bare alert()
+      const overlay = document.createElement('div');
+      overlay.style.cssText = `
+        position: fixed; inset: 0; z-index: 99999;
+        background: rgba(0,0,0,0.75); backdrop-filter: blur(6px);
+        display: flex; align-items: center; justify-content: center; padding: 16px;
+      `;
+      overlay.innerHTML = `
+        <div style="
+          background: #0f172a; border: 1px solid rgba(239,68,68,0.3);
+          border-radius: 20px; padding: 32px 28px; max-width: 360px; width: 100%;
+          text-align: center; box-shadow: 0 25px 60px rgba(0,0,0,0.6);
+          animation: fadeIn 0.25s ease;
+        ">
+          <div style="
+            width: 56px; height: 56px; border-radius: 16px;
+            background: rgba(239,68,68,0.15); display: flex;
+            align-items: center; justify-content: center; margin: 0 auto 20px;
+          ">
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#ef4444" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+              <line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
+            </svg>
+          </div>
+          <h3 style="color: #fff; font-size: 17px; font-weight: 700; margin: 0 0 10px; letter-spacing: -0.3px;">
+            Phiên đăng nhập bị thay thế
+          </h3>
+          <p style="color: #94a3b8; font-size: 14px; line-height: 1.6; margin: 0 0 24px;">
+            Tài khoản của bạn vừa đăng nhập ở một thiết bị khác.<br/>
+            Bạn đã bị đăng xuất khỏi thiết bị này.
+          </p>
+          <button id="fl-btn" style="
+            width: 100%; padding: 12px 20px; border-radius: 12px; border: none; cursor: pointer;
+            background: #ef4444; color: #fff; font-size: 14px; font-weight: 600;
+            box-shadow: 0 4px 20px rgba(239,68,68,0.35); transition: opacity 0.2s;
+          ">Đăng nhập lại</button>
+        </div>
+        <style>@keyframes fadeIn { from { opacity:0; transform:scale(0.93) } to { opacity:1; transform:scale(1) } }</style>
+      `;
+      document.body.appendChild(overlay);
+      const btn = overlay.querySelector('#fl-btn') as HTMLButtonElement;
+      const dismiss = () => { document.body.removeChild(overlay); clearSession(); };
+      btn?.addEventListener('click', dismiss);
+      overlay.addEventListener('click', (e) => { if (e.target === overlay) dismiss(); });
     });
 
     this.socket.on('connect_error', (err) => {
@@ -75,7 +118,7 @@ class SignalingService {
   }
 
   // Check if room exists before joining
-  checkRoom(roomId: string, password?: string, userId?: string): Promise<{ exists: boolean; requiresPassword: boolean; valid: boolean; locked: boolean; isHost?: boolean; isEmpty?: boolean }> {
+  checkRoom(roomId: string, password?: string, userId?: string): Promise<{ exists: boolean; requiresPassword: boolean; valid: boolean; locked: boolean; isHost?: boolean; isEmpty?: boolean; isScheduledWaiting?: boolean; scheduledSettings?: any }> {
     return new Promise((resolve) => {
       // Timeout protection
       const timer = setTimeout(() => resolve({ exists: false, requiresPassword: false, valid: false, locked: false, isEmpty: true }), 2000);

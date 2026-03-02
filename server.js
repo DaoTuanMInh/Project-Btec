@@ -15,7 +15,9 @@ const multer = require('multer');
 const User = require('./models/User');
 const Message = require('./models/Message');
 const Room = require('./models/Room');
+const ScheduledMeeting = require('./models/ScheduledMeeting');
 const crypto = require('crypto');
+const cron = require('node-cron');
 
 // Setup Encryption configuration
 const ENCRYPTION_KEY = crypto.createHash('sha256').update(process.env.JWT_SECRET || 'avo-secret-zero-trust-key-2024').digest('base64').substring(0, 32);
@@ -231,10 +233,73 @@ app.post('/api/user/change-password', async (req, res) => {
 
 app.get('/api/user/meetings/:userId', async (req, res) => {
     try {
-        const meetings = await Room.find({
-            $or: [{ hostId: req.params.userId }, { "participants.userId": req.params.userId }]
-        }).sort({ createdAt: -1 });
+        const meetings = await Room.find({ hostId: req.params.userId }).sort({ createdAt: -1 });
         res.json(meetings);
+    } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// Get active rooms with autoClose=false (persistent rooms) for a specific host
+app.get('/api/rooms/active-persistent/:userId', async (req, res) => {
+    try {
+        const rooms = await Room.find({
+            hostId: req.params.userId,
+            isActive: true,
+            'settings.autoCloseWhenEmpty': false
+        }).sort({ createdAt: -1 });
+        res.json(rooms);
+    } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// Force-close a room by host
+app.post('/api/rooms/close/:roomId', async (req, res) => {
+    try {
+        const { roomId } = req.params;
+        await Room.updateOne({ roomId, isActive: true }, { isActive: false, endedAt: new Date() });
+        await Message.deleteMany({ roomId });
+        // Notify via socket if room still has members
+        io.to(roomId).emit('signal', { type: 'room-closed', roomId });
+        res.json({ success: true });
+    } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// Scheduling & Reminders
+app.post('/api/meetings/schedule', async (req, res) => {
+    try {
+        const { roomId, title, description, hostId, hostName, hostEmail, startTime, durationMinutes, remindBeforeMinutes, invitedEmails, settings } = req.body;
+        const meeting = new ScheduledMeeting({
+            roomId, title, description, hostId, hostName, hostEmail, startTime, durationMinutes, remindBeforeMinutes, invitedEmails, settings
+        });
+        await meeting.save();
+        res.json({ success: true, meeting });
+    } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.get('/api/meetings/my-schedule/:userId', async (req, res) => {
+    try {
+        const meetings = await ScheduledMeeting.find({ hostId: req.params.userId }).sort({ startTime: 1 });
+        res.json(meetings);
+    } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.delete('/api/meetings/:id', async (req, res) => {
+    try {
+        await ScheduledMeeting.findByIdAndDelete(req.params.id);
+        res.json({ success: true });
+    } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.put('/api/meetings/:id', async (req, res) => {
+    try {
+        const { title, description, startTime, remindBeforeMinutes, invitedEmails } = req.body;
+        // Reset flags if start time logic might have changed, but keep simple for now
+        const updated = await ScheduledMeeting.findByIdAndUpdate(req.params.id, {
+            $set: {
+                title, description, startTime, remindBeforeMinutes,
+                invitedEmails: invitedEmails ? invitedEmails.split(',').map(e => e.trim()).filter(Boolean) : [],
+                isReminderSent: false // reset nhắc nhở nếu đổi lịch
+            }
+        }, { new: true });
+        res.json({ success: true, meeting: updated });
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
@@ -282,14 +347,20 @@ io.on('connection', (socket) => {
         if (typeof password === 'function') { callback = password; password = null; }
         try {
             const room = await Room.findOne({ roomId, isActive: true });
+            const scheduled = !room ? await ScheduledMeeting.findOne({ roomId }) : null;
+
             const serverPass = room?.password || room?.settings?.password || '';
+            const isHost = room ? (room.hostId === userId || room.host === userId) : (scheduled && (scheduled.hostId === userId || scheduled.hostEmail === userId));
+
             callback({
-                exists: !!room,
+                exists: !!room || (!!scheduled && isHost), // Allow host to enter scheduled room immediately
+                isScheduledWaiting: !!scheduled && !room && !isHost, // Guests must wait
                 requiresPassword: !!serverPass,
                 valid: !serverPass || password === serverPass,
                 locked: !!room?.settings?.lockRoom,
-                isHost: room?.hostId === userId || room?.host === userId,
-                isEmpty: !roomMap[roomId] || roomMap[roomId].length === 0
+                isHost: isHost,
+                isEmpty: !roomMap[roomId] || roomMap[roomId].length === 0,
+                scheduledSettings: scheduled ? scheduled.settings : null
             });
         } catch (e) { callback({ exists: false, error: e.message }); }
     });
@@ -313,9 +384,6 @@ io.on('connection', (socket) => {
         roomMap[roomId] = roomMap[roomId].filter(u => u.id !== userId);
         roomMap[roomId].push({ id: userId, name: userName, socketId: socket.id, avatar });
 
-        try {
-            await Room.updateOne({ roomId, isActive: true }, { $addToSet: { participants: { userId, username: userName } } });
-        } catch (e) { }
 
         socket.to(roomId).emit('user-connected', userId, userName);
         socket.emit('existing-users', roomMap[roomId].filter(u => u.id !== userId));
@@ -387,6 +455,87 @@ app.get('/*splat', (req, res) => {
     const indexPath = path.join(distPath, 'index.html');
     if (fs.existsSync(indexPath)) res.sendFile(indexPath);
     else res.status(404).send("Build not found");
+});
+
+// CRON JOB FOR MEETING REMINDERS (Runs every minute)
+cron.schedule('* * * * *', async () => {
+    try {
+        const now = new Date();
+        // 1. Send Initial Invites (isInvitedSent = false)
+        const uninvited = await ScheduledMeeting.find({ isInvitedSent: false });
+        for (const meeting of uninvited) {
+            if (meeting.invitedEmails && meeting.invitedEmails.length > 0) {
+                const passwordParam = meeting.settings?.password ? `&pwd=${meeting.settings.password}` : '';
+                const mailOptions = {
+                    from: `"AVO Meeting" <${process.env.EMAIL_USER}>`,
+                    to: meeting.invitedEmails.join(','),
+                    subject: `✉️ Thư mời họp: ${meeting.title}`,
+                    html: `
+                        <h3>Bạn được mời tham gia phòng họp: <b>${meeting.title}</b></h3>
+                        <p>Chủ phòng: <b>${meeting.hostName}</b> ${meeting.hostEmail ? `(${meeting.hostEmail})` : ''}</p>
+                        <p>Bắt đầu: <b>${new Date(meeting.startTime).toLocaleString('vi-VN')}</b></p>
+                        <p>Lời nhắn: <i>${meeting.description || 'Không có mô tả'}</i></p>
+                        <hr/>
+                        <a href="https://guestless-arya-gemmiferous.ngrok-free.dev/?room=${meeting.roomId}${passwordParam}" style="display:inline-block;padding:10px 20px;background:#2563eb;color:white;text-decoration:none;border-radius:5px;font-weight:bold;">Tới Lịch Họp (Tham Gia)</a>
+                    `
+                };
+                await transporter.sendMail(mailOptions);
+            }
+            meeting.isInvitedSent = true;
+            await meeting.save();
+        }
+
+        // 2. Send Reminders (isReminderSent = false and time is within remindBeforeMinutes)
+        const pendingReminders = await ScheduledMeeting.find({
+            isReminderSent: false,
+            startTime: { $gt: now } // Chỉ nhắc các cuộc họp chưa diễn ra
+        });
+
+        for (const meeting of pendingReminders) {
+            const timeDiffMs = new Date(meeting.startTime) - now;
+            const timeDiffMinutes = timeDiffMs / (1000 * 60);
+
+            // Nếu thời gian chênh lệch bằng hoặc nhỏ hơn số phút cấu hình nhắc nhở
+            if (timeDiffMinutes <= meeting.remindBeforeMinutes) {
+                let recipients = meeting.invitedEmails || [];
+                if (meeting.hostEmail && !recipients.includes(meeting.hostEmail)) {
+                    recipients.push(meeting.hostEmail); // Nhắc cả Host
+                }
+                if (recipients.length > 0) {
+                    const passwordParam = meeting.settings?.password ? `&pwd=${meeting.settings.password}` : '';
+                    const mailOptions = {
+                        from: `"AVO Meeting" <${process.env.EMAIL_USER}>`,
+                        to: recipients.join(','),
+                        subject: `🚨 Nhắc nhở: Phòng họp "${meeting.title}" sắp bắt đầu!`,
+                        html: `
+                            <h3 style="color:#e11d48">Sắp đến giờ họp!</h3>
+                            <p>Cuộc họp <b>${meeting.title}</b> sẽ diễn ra trong vòng <b>${Math.ceil(timeDiffMinutes)} phút</b> nữa.</p>
+                            <p>Đừng để mọi người phải đợi nhé!</p>
+                            <hr/>
+                            <a href="https://guestless-arya-gemmiferous.ngrok-free.dev/?room=${meeting.roomId}${passwordParam}" style="display:inline-block;padding:10px 20px;background:#e11d48;color:white;text-decoration:none;border-radius:5px;font-weight:bold;">Vào phòng ngay</a>
+                        `
+                    };
+                    await transporter.sendMail(mailOptions);
+                }
+                meeting.isReminderSent = true;
+                await meeting.save();
+            }
+        }
+        // 3. Auto-close rooms open for more than 12 hours (even if autoCloseWhenEmpty = false)
+        const twelveHoursAgo = new Date(now.getTime() - 12 * 60 * 60 * 1000);
+        const staleRooms = await Room.find({
+            isActive: true,
+            createdAt: { $lt: twelveHoursAgo }
+        });
+        for (const room of staleRooms) {
+            await Room.updateOne({ _id: room._id }, { isActive: false, endedAt: new Date() });
+            await Message.deleteMany({ roomId: room.roomId });
+            io.to(room.roomId).emit('signal', { type: 'room-closed', roomId: room.roomId, reason: 'Tự đóng sau 12 giờ không hoạt động' });
+            console.log(`⏰ Tự đóng phòng: ${room.roomId} (quá 12 giờ)`);
+        }
+    } catch (e) {
+        console.error("Cron Job Error:", e);
+    }
 });
 
 server.listen(PORT, '0.0.0.0', () => {

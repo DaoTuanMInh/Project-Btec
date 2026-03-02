@@ -1,9 +1,9 @@
 // @ts-nocheck
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, User as UserIcon, Lock, Mail, Camera, Save, Key, Send, CheckCircle, AlertCircle, Clock, Calendar, Users as UsersIcon, History, Eye, EyeOff } from 'lucide-react';
+import { X, User as UserIcon, Lock, Mail, Camera, Save, Key, Send, CheckCircle, AlertCircle, Clock, Eye, EyeOff } from 'lucide-react';
 import { useToast } from '../ui/Toast';
-import { updateProfile, changePassword, requestEmailChange, verifyEmailChange, getMeetingHistory } from '../../services/authService';
+import { updateProfile, changePassword, requestEmailChange, verifyEmailChange } from '../../services/authService';
 
 interface ProfileModalProps {
     isOpen: boolean;
@@ -14,9 +14,8 @@ interface ProfileModalProps {
 
 const ProfileModal: React.FC<ProfileModalProps> = ({ isOpen, onClose, user, onUpdateUser }) => {
     const { showToast } = useToast();
-    const [activeTab, setActiveTab] = useState<'info' | 'security' | 'contact' | 'history'>('info');
+    const [activeTab, setActiveTab] = useState<'info' | 'security' | 'contact'>('info');
     const [loading, setLoading] = useState(false);
-    const [meetings, setMeetings] = useState<any[]>([]);
 
     // Info State
     const [avatarUrl, setAvatarUrl] = useState(user?.avatar || '');
@@ -87,28 +86,10 @@ const ProfileModal: React.FC<ProfileModalProps> = ({ isOpen, onClose, user, onUp
         } finally { setLoading(false); }
     };
 
-    const handleFetchHistory = async () => {
-        if (!user || !user.id) {
-            console.warn("[Profile] No User ID found for history fetch");
-            return;
-        }
-        setLoading(true);
-        try {
-            console.log(`[Profile] Fetching history for: ${user.id}`);
-            const data = await getMeetingHistory(user.id);
-            console.log(`[Profile] Received ${data.length} records`);
-            setMeetings(data);
-        } catch (e: any) {
-            console.error("[Profile] Fetch error:", e);
-            showToast(e.message, 'error');
-        } finally { setLoading(false); }
-    };
 
     // Auto fetch when tab is opened
     React.useEffect(() => {
-        if (activeTab === 'history' && isOpen) {
-            handleFetchHistory();
-        }
+        // Nothing to auto-fetch anymore
     }, [activeTab, isOpen]);
 
     if (!isOpen) return null;
@@ -139,7 +120,6 @@ const ProfileModal: React.FC<ProfileModalProps> = ({ isOpen, onClose, user, onUp
                         {/* Tabs (Sidebar on Desktop, Top Bar on Mobile) */}
                         <div className="w-full md:w-1/3 border-b md:border-b-0 md:border-r border-slate-800 bg-slate-900/50 p-3 md:p-4 flex flex-row md:flex-col gap-2 overflow-x-auto no-scrollbar">
                             <SidebarItem active={activeTab === 'info'} onClick={() => setActiveTab('info')} icon={UserIcon} label="Thông tin" isMobileHorizontal />
-                            <SidebarItem active={activeTab === 'history'} onClick={() => setActiveTab('history')} icon={History} label="Lịch sử họp" isMobileHorizontal />
                             <SidebarItem active={activeTab === 'security'} onClick={() => setActiveTab('security')} icon={Lock} label="Bảo mật" isMobileHorizontal />
                             <SidebarItem active={activeTab === 'contact'} onClick={() => setActiveTab('contact')} icon={Mail} label="Đổi email" isMobileHorizontal />
                         </div>
@@ -323,68 +303,6 @@ const ProfileModal: React.FC<ProfileModalProps> = ({ isOpen, onClose, user, onUp
                                 </div>
                             )}
 
-                            {/* --- HISTORY TAB --- */}
-                            {activeTab === 'history' && (
-                                <div className="space-y-4">
-                                    <div className="flex justify-between items-center mb-2">
-                                        <h3 className="text-lg font-semibold text-white flex items-center gap-2"><History size={20} className="text-blue-400" /> Lịch sử cuộc họp</h3>
-                                        <span className="text-xs text-slate-500 bg-slate-800 px-2 py-1 rounded-full">{meetings.length} phiên</span>
-                                    </div>
-
-                                    {loading && meetings.length === 0 ? (
-                                        <div className="flex flex-col items-center justify-center py-10 gap-3">
-                                            <div className="w-8 h-8 border-4 border-blue-500 border-t-transparent animate-spin rounded-full" />
-                                            <p className="text-slate-500 text-sm">Đang tải lịch sử...</p>
-                                        </div>
-                                    ) : meetings.length === 0 ? (
-                                        <div className="text-center py-20 bg-slate-900/30 rounded-2xl border border-dashed border-slate-800/50">
-                                            <History size={48} className="mx-auto text-slate-800 mb-4 opacity-20" />
-                                            <p className="text-slate-400 font-medium">Không có lịch sử cuộc họp gần đây</p>
-                                            <p className="text-slate-600 text-xs mt-1">Các cuộc họp bạn tham gia sẽ xuất hiện ở đây</p>
-                                        </div>
-                                    ) : (
-                                        <div className="space-y-3">
-                                            {meetings.map((m) => {
-                                                const isHost = m.hostId === user.id;
-                                                return (
-                                                    <div key={m._id} className={`bg-slate-900 border p-4 rounded-2xl hover:border-blue-500/30 transition-all group ${isHost ? 'border-blue-500/30' : 'border-slate-800'}`}>
-                                                        <div className="flex justify-between items-start mb-2">
-                                                            <div>
-                                                                <div className="flex items-center gap-2 mb-1">
-                                                                    <div className="text-blue-400 text-[10px] font-bold uppercase tracking-wider">Room ID: {m.roomId}</div>
-                                                                    {isHost && (
-                                                                        <span className="bg-amber-500/10 text-amber-500 text-[9px] px-1.5 py-0.5 rounded border border-amber-500/20 font-bold flex items-center gap-1">
-                                                                            <UserIcon size={10} /> CHỦ PHÒNG
-                                                                        </span>
-                                                                    )}
-                                                                </div>
-                                                                <h4 className="text-white font-bold text-sm group-hover:text-blue-400 transition-colors">
-                                                                    {isHost ? "Phòng họp của bạn" : `Cuộc họp cùng ${m.host}`}
-                                                                </h4>
-                                                            </div>
-                                                            <div className="text-right">
-                                                                <div className="text-slate-300 text-xs font-bold flex items-center gap-1 justify-end"><Calendar size={12} /> {new Date(m.createdAt).toLocaleDateString('vi-VN')}</div>
-                                                                <div className="text-[10px] text-slate-500">{new Date(m.createdAt).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}</div>
-                                                            </div>
-                                                        </div>
-
-                                                        <div className="flex items-center gap-4 mt-3 pt-3 border-t border-slate-800/50">
-                                                            <div className="flex items-center gap-1.5 text-xs text-slate-400">
-                                                                <UsersIcon size={14} className="text-slate-500" />
-                                                                <span>{m.participants?.length || 0} người tham gia</span>
-                                                            </div>
-                                                            <div className="flex items-center gap-1.5 text-xs text-slate-400">
-                                                                <Clock size={14} className="text-slate-500" />
-                                                                <span>{m.endedAt ? Math.round((new Date(m.endedAt).getTime() - new Date(m.createdAt).getTime()) / 60000) : '?'} phút</span>
-                                                            </div>
-                                                        </div>
-                                                    </div>
-                                                );
-                                            })}
-                                        </div>
-                                    )}
-                                </div>
-                            )}
 
                         </div>
                     </div>

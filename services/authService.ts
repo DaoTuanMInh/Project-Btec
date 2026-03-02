@@ -5,40 +5,53 @@
  */
 
 
-export const storeToken = (token: string) => {
-  // Sử dụng HttpOnly Cookie là tốt nhất, nhưng ở client-side 
-  // chúng ta thường lưu vào sessionStorage để tránh XSS persistent
-  sessionStorage.setItem('avo_auth_token', token);
+const TOKEN_KEY = 'avo_auth_token';
+const USER_KEY = 'avo_auth_user';
+
+export const storeToken = (token: string, rememberMe = false) => {
+  if (rememberMe) {
+    localStorage.setItem(TOKEN_KEY, token);
+    sessionStorage.removeItem(TOKEN_KEY);
+  } else {
+    sessionStorage.setItem(TOKEN_KEY, token);
+    localStorage.removeItem(TOKEN_KEY);
+  }
 };
 
-export const storeUser = (user: { id: string, username: string, email?: string, currentRoom?: string, avatar?: string }) => {
+export const storeUser = (user: { id: string, username: string, email?: string, currentRoom?: string, avatar?: string }, rememberMe = false) => {
   try {
-    sessionStorage.setItem('avo_auth_user', JSON.stringify(user));
+    const val = JSON.stringify(user);
+    if (rememberMe) {
+      localStorage.setItem(USER_KEY, val);
+      sessionStorage.removeItem(USER_KEY);
+    } else {
+      sessionStorage.setItem(USER_KEY, val);
+      localStorage.removeItem(USER_KEY);
+    }
   } catch (err) {
-    console.warn("Storage warning (auth):", err);
+    console.warn('Storage warning (auth):', err);
   }
 };
 
 export const getUser = () => {
-  const u = sessionStorage.getItem('avo_auth_user');
+  const u = localStorage.getItem(USER_KEY) || sessionStorage.getItem(USER_KEY);
   return u ? JSON.parse(u) : null;
 };
 
 export const getToken = () => {
-  return sessionStorage.getItem('avo_auth_token');
+  return localStorage.getItem(TOKEN_KEY) || sessionStorage.getItem(TOKEN_KEY);
 };
 
 export const clearSession = () => {
-  sessionStorage.removeItem('avo_auth_token');
-  sessionStorage.removeItem('avo_auth_user');
+  localStorage.removeItem(TOKEN_KEY);
+  localStorage.removeItem(USER_KEY);
+  sessionStorage.removeItem(TOKEN_KEY);
+  sessionStorage.removeItem(USER_KEY);
   window.location.reload();
 };
 
 export const validateSession = () => {
-  const token = getToken();
-  if (!token) return false;
-  // TODO: Sau này sẽ thêm API call để kiểm tra token với Server thật
-  return true;
+  return !!getToken();
 };
 
 // --- Real Authentication Logic (Connected to MongoDB) ---
@@ -53,7 +66,7 @@ export const register = async (email: string, username: string, password: string
   if (!res.ok) throw new Error(data.error || 'Đăng ký thất bại');
 };
 
-export const login = async (email: string, password: string): Promise<{ token: string, user: { id: string, email: string, username: string, currentRoom?: string, avatar?: string } }> => {
+export const login = async (email: string, password: string, rememberMe = false): Promise<{ token: string, user: { id: string, email: string, username: string, currentRoom?: string, avatar?: string } }> => {
   const res = await fetch('/api/auth/login', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -63,8 +76,8 @@ export const login = async (email: string, password: string): Promise<{ token: s
 
   if (!res.ok) throw new Error(data.error || 'Đăng nhập thất bại');
 
-  storeToken(data.token);
-  storeUser({ id: data.user.id, email: data.user.email, username: data.user.username, currentRoom: data.user.currentRoom, avatar: data.user.avatar });
+  storeToken(data.token, rememberMe);
+  storeUser({ id: data.user.id, email: data.user.email, username: data.user.username, currentRoom: data.user.currentRoom, avatar: data.user.avatar }, rememberMe);
   return { token: data.token, user: { id: data.user.id, email: data.user.email, username: data.user.username, currentRoom: data.user.currentRoom, avatar: data.user.avatar } };
 };
 

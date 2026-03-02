@@ -14,11 +14,7 @@ const RoomSchema = new mongoose.Schema({
         allowReactions: { type: Boolean, default: true },
         autoCloseWhenEmpty: { type: Boolean, default: true }
     },
-    participants: [{
-        userId: String,
-        username: String,
-        joinedAt: { type: Date, default: Date.now }
-    }],
+
     isActive: { type: Boolean, default: true },
     createdAt: { type: Date, default: Date.now },
     endedAt: { type: Date }

@@ -4,9 +4,10 @@ import MobileSetup from './MobileSetup';
 import DesktopSetup from './DesktopSetup';
 import { useToast } from '../ui/Toast';
 import { useSetupMedia } from '../../hooks/useSetupMedia';
-import { LogOut, User as UserIcon } from 'lucide-react';
+import { LogOut, User as UserIcon, CalendarPlus } from 'lucide-react';
 import ConfirmModal from '../ui/ConfirmModal';
 import ProfileModal from '../profile/ProfileModal';
+import ScheduleModal from '../schedule/ScheduleModal';
 
 interface Props {
   onJoin: (user: User, roomId: string, stream?: MediaStream, settings?: MeetingSettings) => void;
@@ -24,6 +25,7 @@ interface Props {
 const SetupScreen: React.FC<Props> = ({ onJoin, setupMedia, initialName = "", userId, onLogout, onUpdateUser, resumeRoomId, onClearResume, user }) => {
   const { showToast } = useToast();
   const [isProfileOpen, setProfileOpen] = useState(false);
+  const [isScheduleOpen, setScheduleOpen] = useState(false);
   const [currentUser, setCurrentUser] = useState(user || {});
 
   // Sync prop user to state
@@ -39,8 +41,21 @@ const SetupScreen: React.FC<Props> = ({ onJoin, setupMedia, initialName = "", us
   // 2. Form State
   const [name, setName] = useState(initialName);
   const [room, setRoom] = useState("");
-  const [isCreateMode, setIsCreateMode] = useState(false);
+  const [mode, setMode] = useState<'join' | 'create' | 'schedule'>('join');
   const [joinPassword, setJoinPassword] = useState("");
+
+  React.useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const urlRoom = params.get('room');
+    const urlPwd = params.get('pwd');
+    if (urlRoom) {
+      setRoom(urlRoom);
+      setMode('join');
+      if (urlPwd) {
+        setJoinPassword(urlPwd);
+      }
+    }
+  }, []);
   const [joinSettings, setJoinSettings] = useState<MeetingSettings>({
     requireMic: false,
     requireCamera: false,
@@ -89,9 +104,55 @@ const SetupScreen: React.FC<Props> = ({ onJoin, setupMedia, initialName = "", us
   // NOTE: Initialization logic removed as it is now handled in App.tsx via useSetupMedia hook.
   // This prevents the camera from restarting when SetupScreen remounts (e.g. keyboard open, resize).
 
+  const executeJoin = async (targetRoom: string) => {
+    if (!name) return showToast("Vui lòng điền tên hiển thị của bạn.", 'warning');
+    if (!targetRoom) return;
+
+    try {
+      const { signaling } = await import('../../services/signaling');
+      // Check room with userId to detect if Host
+      const { exists, requiresPassword, valid, locked, isHost, isEmpty, isScheduledWaiting, scheduledSettings } = await signaling.checkRoom(targetRoom, joinPassword, userId);
+      console.log("🔍 Room Check Result:", { exists, requiresPassword, valid, locked, isHost, isEmpty, isScheduledWaiting, inputPass: joinPassword });
+
+      if (isScheduledWaiting) return showToast("Phòng họp hẹn trước này chưa được bắt đầu bởi Chủ phòng.", 'warning');
+      if (!exists) return showToast("Phòng không tồn tại hoặc đã kết thúc.", 'error');
+      if (locked) return showToast("🔒 Phòng đã bị khóa. Không thể tham gia.", 'error');
+      if (requiresPassword && !valid) return showToast("Mật khẩu phòng không đúng.", 'error');
+
+      let isRejoiningHost = isHost || false;
+
+      // Fallback for Legacy/Guest (local storage check)
+      if (!isRejoiningHost) {
+        try {
+          const savedRooms = JSON.parse(localStorage.getItem('avo_created_rooms') || '[]');
+          if (savedRooms.includes(targetRoom)) isRejoiningHost = true;
+        } catch (e) { }
+      }
+
+      let finalSettings: MeetingSettings = { ...joinSettings, password: joinPassword };
+      if (scheduledSettings && isRejoiningHost && isEmpty) {
+        // If host is starting a scheduled room, override default join settings with scheduled settings
+        finalSettings = { ...scheduledSettings, password: joinPassword };
+      }
+
+      onJoin({
+        id: userId || Math.random().toString(36).substr(2, 9),
+        name,
+        isHost: isRejoiningHost,
+        muted: !isMicOn,
+        videoOff: !isCameraOn,
+        avatar: currentUser?.avatar
+      }, targetRoom, previewStream || undefined, finalSettings);
+
+    } catch (err) {
+      console.error("Room check failed", err);
+      showToast("Không thể kết nối đến máy chủ.", 'error');
+    }
+  };
+
   // Form Handlers
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSubmit = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
 
     // Check Hardware Intent
     if (isCameraOn) {
@@ -104,7 +165,7 @@ const SetupScreen: React.FC<Props> = ({ onJoin, setupMedia, initialName = "", us
 
     if (!name || !room) return;
 
-    if (isCreateMode) {
+    if (mode === 'create') {
       if (joinSettings.requireCamera && !isCameraOn) return showToast("Cài đặt phòng yêu cầu bật Camera.", 'warning');
       if (joinSettings.requireMic && !isMicOn) return showToast("Cài đặt phòng yêu cầu bật Mic.", 'warning');
 
@@ -113,52 +174,30 @@ const SetupScreen: React.FC<Props> = ({ onJoin, setupMedia, initialName = "", us
         if (!savedRooms.includes(room)) localStorage.setItem('avo_created_rooms', JSON.stringify([...savedRooms, room]));
       } catch (e) { }
       onJoin({ id: userId || Math.random().toString(36).substr(2, 9), name, isHost: true, muted: !isMicOn, videoOff: !isCameraOn, avatar: currentUser?.avatar }, room, previewStream || undefined, joinSettings);
-    } else {
-      try {
-        const { signaling } = await import('../../services/signaling');
-        // Check room with userId to detect if Host
-        const { exists, requiresPassword, valid, locked, isHost, isEmpty } = await signaling.checkRoom(room, joinPassword, userId);
-        console.log("🔍 Room Check Result:", { exists, requiresPassword, valid, locked, isHost, isEmpty, inputPass: joinPassword });
-
-        if (!exists) return showToast("Phòng không tồn tại hoặc đã kết thúc.", 'error');
-        if (locked) return showToast("🔒 Phòng đã bị khóa. Không thể tham gia.", 'error');
-        if (requiresPassword && !valid) return showToast("Mật khẩu phòng không đúng.", 'error');
-
-        let isRejoiningHost = isHost || false;
-
-        // Fallback for Legacy/Guest (local storage check)
-        if (!isRejoiningHost) {
-          try {
-            const savedRooms = JSON.parse(localStorage.getItem('avo_created_rooms') || '[]');
-            if (savedRooms.includes(room)) isRejoiningHost = true;
-          } catch (e) { }
-        }
-
-        const finalSettings: MeetingSettings = { ...joinSettings, password: joinPassword };
-        onJoin({
-          id: userId || Math.random().toString(36).substr(2, 9),
-          name,
-          isHost: isRejoiningHost,
-          muted: !isMicOn,
-          videoOff: !isCameraOn,
-          avatar: currentUser?.avatar
-        }, room, previewStream || undefined, finalSettings);
-
-      } catch (err) {
-        console.error("Room check failed", err);
-        showToast("Không thể kết nối đến máy chủ.", 'error');
-      }
+    } else if (mode === 'join') {
+      executeJoin(room);
     }
+  };
+
+  const handleDirectJoin = (targetRoomId: string) => {
+    setScheduleOpen(false);
+    setRoom(targetRoomId);
+    setMode('join');
+    // Give state a moment to settle, then join
+    setTimeout(() => {
+      executeJoin(targetRoomId);
+    }, 100);
   };
 
   const joinFormProps = {
     name, setName,
     room, setRoom,
-    isCreateMode, setIsCreateMode,
+    mode, setMode,
     joinSettings, setJoinSettings,
     joinPassword, setJoinPassword,
     onSubmit: handleSubmit,
-    onShowToast: showToast
+    onShowToast: showToast,
+    currentUser // Pass currentUser for email scheduling
   };
 
   const mediaPreviewProps = {
@@ -171,41 +210,50 @@ const SetupScreen: React.FC<Props> = ({ onJoin, setupMedia, initialName = "", us
   };
 
   return (
-    <div className="min-h-screen p-6 flex flex-col items-center justify-center max-w-6xl mx-auto">
-      <div className="md:hidden w-full">
+    <div className="min-h-screen flex flex-col">
+      {/* Mobile Layout */}
+      <div className="md:hidden w-full p-6 flex flex-col items-center justify-center min-h-screen">
+        {/* Mobile top controls */}
+        <div className="fixed top-4 right-4 flex gap-2 z-50">
+          {user && (
+            <>
+              <button onClick={() => setScheduleOpen(true)} className="w-10 h-10 rounded-full bg-slate-800 hover:bg-slate-700 flex items-center justify-center text-indigo-400 border border-slate-700" title="Lịch hẹn">
+                <CalendarPlus size={18} />
+              </button>
+              <button onClick={() => setProfileOpen(true)} className="w-10 h-10 rounded-full bg-slate-800 overflow-hidden border border-slate-700">
+                {currentUser.avatar ? <img src={currentUser.avatar} className="w-full h-full object-cover" /> : <UserIcon size={18} className="text-slate-400" />}
+              </button>
+            </>
+          )}
+          {onLogout && (
+            <button onClick={onLogout} className="p-2.5 bg-red-600/20 text-red-400 rounded-full border border-red-900/50">
+              <LogOut size={18} />
+            </button>
+          )}
+        </div>
         <MobileSetup joinFormProps={joinFormProps} mediaPreviewProps={mediaPreviewProps} />
       </div>
-      <div className="hidden md:flex w-full justify-center">
-        <DesktopSetup joinFormProps={joinFormProps} mediaPreviewProps={mediaPreviewProps} />
-      </div>
 
-      {/* Top Right Controls */}
-      <div className="fixed top-4 right-4 flex gap-3 z-50">
-        {user && (
-          <button
-            onClick={() => setProfileOpen(true)}
-            className="w-11 h-11 rounded-full bg-slate-800 hover:bg-slate-700 flex items-center justify-center text-slate-400 hover:text-white transition-colors overflow-hidden border border-slate-700"
-            title="Hồ sơ cá nhân"
-          >
-            {currentUser.avatar ? (
-              <img src={currentUser.avatar} alt="Avatar" className="w-full h-full object-cover" />
-            ) : (
-              <UserIcon size={20} />
-            )}
-          </button>
-        )}
-        {onLogout && (
-          <button
-            onClick={onLogout}
-            className="p-3 bg-red-600/20 text-red-400 hover:bg-red-600/30 hover:text-red-300 rounded-full transition-all border border-red-900/50 backdrop-blur-sm cursor-pointer"
-            title="Đăng xuất"
-          >
-            <LogOut size={20} />
-          </button>
-        )}
+      {/* Desktop Layout */}
+      <div className="hidden md:flex w-full h-screen">
+        <DesktopSetup
+          joinFormProps={joinFormProps}
+          mediaPreviewProps={mediaPreviewProps}
+          user={currentUser}
+          onOpenProfile={() => setProfileOpen(true)}
+          onOpenSchedule={() => setScheduleOpen(true)}
+          onLogout={onLogout}
+        />
       </div>
 
       {/* Modals */}
+      <ScheduleModal
+        isOpen={isScheduleOpen}
+        onClose={() => setScheduleOpen(false)}
+        user={currentUser}
+        onDirectJoin={handleDirectJoin}
+      />
+
       <ProfileModal
         isOpen={isProfileOpen}
         onClose={() => setProfileOpen(false)}

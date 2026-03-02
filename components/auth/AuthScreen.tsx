@@ -29,6 +29,15 @@ const AuthScreen: React.FC<AuthScreenProps> = ({ onAuthenticated }) => {
     const [showPass, setShowPass] = useState(false);
     const [showConfirmPass, setShowConfirmPass] = useState(false);
 
+    // Remember Me
+    const [rememberMe, setRememberMe] = useState(() => !!localStorage.getItem('avo_remember_email'));
+
+    // Pre-fill email if remembered
+    React.useEffect(() => {
+        const saved = localStorage.getItem('avo_remember_email');
+        if (saved) setEmail(saved);
+    }, []);
+
     const handleSendOtp = async () => {
         if (!email) return showToast("Vui lòng nhập Email", 'error');
         setIsLoading(true);
@@ -70,7 +79,12 @@ const AuthScreen: React.FC<AuthScreenProps> = ({ onAuthenticated }) => {
         try {
             if (isLogin) {
                 // LOGIN
-                await login(email, password);
+                if (rememberMe) {
+                    localStorage.setItem('avo_remember_email', email);
+                } else {
+                    localStorage.removeItem('avo_remember_email');
+                }
+                await login(email, password, rememberMe);
                 showToast("Đăng nhập thành công!", 'success');
                 onAuthenticated();
             } else {
@@ -111,7 +125,7 @@ const AuthScreen: React.FC<AuthScreenProps> = ({ onAuthenticated }) => {
                 className="w-full max-w-md bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl overflow-hidden"
             >
                 <div className="bg-slate-800/50 p-6 text-center border-b border-slate-800">
-                    <img src="/logoAVO.png" alt="Logo" className="w-24 h-24 mx-auto mb-1 object-contain rounded-full shadow-lg" />
+                    <img src="/logoAVO.png" alt="Logo" className="w-24 h-24 mx-auto mb-1 object-contain rounded-full shadow-lg" onError={(e) => e.currentTarget.style.display = 'none'} />
                     <p className="text-slate-200 font-medium">
                         {isLogin ? "Đăng nhập bằng Email" : (otpSent ? "Nhập mã xác thực" : "Tạo tài khoản mới")}
                     </p>
@@ -247,6 +261,36 @@ const AuthScreen: React.FC<AuthScreenProps> = ({ onAuthenticated }) => {
                                 </MotionDiv>
                             ) : null}
                         </AnimatePresence>
+
+                        {/* Remember Me (login only) */}
+                        {isLogin && (
+                            <div className="flex items-center justify-between">
+                                <label className="flex items-center gap-2.5 cursor-pointer select-none group">
+                                    <div className="relative">
+                                        <input
+                                            type="checkbox"
+                                            checked={rememberMe}
+                                            onChange={e => setRememberMe(e.target.checked)}
+                                            className="sr-only"
+                                        />
+                                        <div className={`w-4.5 h-4.5 w-[18px] h-[18px] rounded border-2 flex items-center justify-center transition-all
+                                            ${rememberMe
+                                                ? 'bg-blue-600 border-blue-600'
+                                                : 'bg-slate-800 border-slate-600 group-hover:border-slate-400'
+                                            }`}
+                                        >
+                                            {rememberMe && (
+                                                <svg width="10" height="8" viewBox="0 0 10 8" fill="none">
+                                                    <path d="M1 4L3.5 6.5L9 1" stroke="white" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+                                                </svg>
+                                            )}
+                                        </div>
+                                    </div>
+                                    <span className="text-sm text-slate-400 group-hover:text-slate-300 transition-colors">Nhớ đăng nhập</span>
+                                </label>
+                                <span className="text-xs text-slate-600 italic">Lưu trong {rememberMe ? '30 ngày' : 'phiên này'}</span>
+                            </div>
+                        )}
 
                         {/* Submit Button */}
                         <button

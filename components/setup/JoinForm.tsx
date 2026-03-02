@@ -7,56 +7,198 @@ const generateRoomId = () => {
     return `${s()}-${s()}-${s()}-${s()}`;
 };
 
+// ─── EmailTagInput ────────────────────────────────────────────────────────────
+interface EmailTagInputProps {
+    value: string;
+    onChange: (val: string) => void;
+}
+
+const EmailTagInput: React.FC<EmailTagInputProps> = ({ value, onChange }) => {
+    const [inputVal, setInputVal] = React.useState('');
+    const inputRef = React.useRef<HTMLInputElement>(null);
+
+    const tags = value.split(',').map(e => e.trim()).filter(Boolean);
+
+    const parseEmails = (raw: string): string[] =>
+        raw.split(/[\s,;\t\n\r]+/).map(e => e.trim().toLowerCase()).filter(e => e.includes('@'));
+
+    const addEmails = (raw: string) => {
+        const newOnes = parseEmails(raw);
+        if (!newOnes.length) return;
+        const merged = [...new Set([...tags, ...newOnes])];
+        onChange(merged.join(', '));
+    };
+
+    const removeTag = (email: string) => onChange(tags.filter(t => t !== email).join(', '));
+
+    const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+        // Enter still works as separator on desktop
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            if (inputVal.trim()) { addEmails(inputVal); setInputVal(''); }
+        }
+        if (e.key === 'Backspace' && !inputVal && tags.length) removeTag(tags[tags.length - 1]);
+    };
+
+    // onChange handles Space/comma/semicolon — catches mobile virtual keyboards that skip keydown
+    const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const val = e.target.value;
+        // If the last typed char is a separator → commit
+        if (val.endsWith(' ') || val.endsWith(',') || val.endsWith(';')) {
+            const toAdd = val.slice(0, -1).trim();
+            if (toAdd) { addEmails(toAdd); }
+            setInputVal('');
+        } else {
+            setInputVal(val);
+        }
+    };
+
+    const handlePaste = (e: React.ClipboardEvent<HTMLInputElement>) => {
+        e.preventDefault();
+        addEmails(inputVal + ' ' + e.clipboardData.getData('text'));
+        setInputVal('');
+    };
+
+    const handleBlur = () => {
+        if (inputVal.trim()) { addEmails(inputVal); setInputVal(''); }
+    };
+
+    return (
+        <div
+            onClick={() => inputRef.current?.focus()}
+            className="w-full min-h-[76px] max-h-44 overflow-y-auto bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 flex flex-wrap gap-1.5 cursor-text focus-within:ring-2 focus-within:ring-indigo-500 focus-within:border-transparent transition-all"
+        >
+            {tags.map(email => (
+                <span key={email} className="flex items-center gap-1 bg-indigo-600/25 text-indigo-300 text-xs px-2 py-1 rounded-md border border-indigo-500/30 font-mono">
+                    <span className="truncate max-w-[200px]" title={email}>{email}</span>
+                    <button type="button" onClick={ev => { ev.stopPropagation(); removeTag(email); }} className="text-indigo-400/60 hover:text-red-400 transition-colors leading-none text-base ml-0.5">×</button>
+                </span>
+            ))}
+            <input
+                ref={inputRef}
+                type="text"
+                value={inputVal}
+                onChange={handleChange}
+                onKeyDown={handleKeyDown}
+                onPaste={handlePaste}
+                onBlur={handleBlur}
+                className="flex-1 min-w-[160px] bg-transparent text-slate-200 text-sm outline-none placeholder:text-slate-600 py-0.5"
+                placeholder={tags.length === 0 ? 'Nhập email, nhấn Space hoặc Enter để thêm...' : 'Thêm email...'}
+            />
+        </div>
+    );
+};
+
 interface JoinFormProps {
     name: string;
     setName: (name: string) => void;
     room: string;
     setRoom: (room: string) => void;
-    isCreateMode: boolean;
-    setIsCreateMode: (mode: boolean) => void;
+    mode: 'join' | 'create' | 'schedule';
+    setMode: (mode: 'join' | 'create' | 'schedule') => void;
     joinSettings: MeetingSettings;
     setJoinSettings: (settings: MeetingSettings) => void;
     joinPassword: string;
     setJoinPassword: (pass: string) => void;
     onSubmit: (e: React.FormEvent) => void;
     onShowToast?: (message: string, type: 'success' | 'error' | 'info' | 'warning') => void;
+    currentUser?: any;
+    hideTabs?: boolean;
 }
 
 const JoinForm: React.FC<JoinFormProps> = ({
     name, setName,
     room, setRoom,
-    isCreateMode, setIsCreateMode,
+    mode, setMode,
     joinSettings, setJoinSettings,
     joinPassword, setJoinPassword,
-    onSubmit, onShowToast
+    onSubmit, onShowToast, currentUser,
+    hideTabs = false
 }) => {
     const [showPass, setShowPass] = React.useState(false);
     const [showJoinPass, setShowJoinPass] = React.useState(false);
+    const [title, setTitle] = React.useState("");
+    const [description, setDescription] = React.useState("");
+    const [startTime, setStartTime] = React.useState("");
+    const [invitedEmails, setInvitedEmails] = React.useState("");
+    const [remindBeforeMinutes, setRemindBeforeMinutes] = React.useState(15);
+    const [isScheduling, setIsScheduling] = React.useState(false);
+
+    const handleLocalSubmit = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (mode === 'schedule') {
+            if (!title || !startTime || !room || !name) return onShowToast?.("Vui lòng điền đủ Tên cuộc họp, Thời gian bắt đầu và Tên hiển thị.", "error");
+
+            setIsScheduling(true);
+            try {
+                const res = await fetch('/api/meetings/schedule', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        roomId: room,
+                        title, description,
+                        hostId: currentUser?.id || 'guest',
+                        hostName: name,
+                        hostEmail: currentUser?.email,
+                        startTime,
+                        durationMinutes: 60,
+                        remindBeforeMinutes: Number(remindBeforeMinutes),
+                        invitedEmails: invitedEmails.split(',').map(e => e.trim()).filter(Boolean),
+                        settings: joinSettings
+                    })
+                });
+                if (!res.ok) {
+                    const data = await res.json();
+                    throw new Error(data.error);
+                }
+                onShowToast?.("Lên lịch thành công! Đã gửi email thư mời.", "success");
+                setMode('join'); // Chuyển về join
+                setTitle(""); setDescription(""); setStartTime(""); setInvitedEmails("");
+            } catch (error: any) {
+                onShowToast?.(error.message || "Lên lịch thất bại", "error");
+            } finally { setIsScheduling(false); }
+        } else {
+            onSubmit(e);
+        }
+    };
+
     return (
         <div className="flex-1 w-full max-w-md">
             <div className="bg-slate-900/50 p-6 rounded-2xl border border-slate-800 backdrop-blur-sm md:max-h-[60vh] md:overflow-y-auto custom-scrollbar">
-                {/* Tabs */}
-                <div className="flex mb-6 bg-slate-800/50 p-1 rounded-xl">
-                    <button
-                        type="button"
-                        onClick={() => setIsCreateMode(false)}
-                        className={`flex-1 py-2 px-4 rounded-lg text-sm font-medium transition-all ${!isCreateMode ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-400 hover:text-white'}`}
-                    >
-                        Tham Gia
-                    </button>
-                    <button
-                        type="button"
-                        onClick={() => {
-                            setIsCreateMode(true);
-                            if (!room) setRoom(generateRoomId());
-                        }}
-                        className={`flex-1 py-2 px-4 rounded-lg text-sm font-medium transition-all ${isCreateMode ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-400 hover:text-white'}`}
-                    >
-                        Tạo Phòng Mới
-                    </button>
-                </div>
+                {/* Tabs - only show when not hidden (mobile or non-sidebar layouts) */}
+                {!hideTabs && (
+                    <div className="flex mb-6 bg-slate-800/50 p-1 rounded-xl">
+                        <button
+                            type="button"
+                            onClick={() => setMode('join')}
+                            className={`flex-1 py-2 px-2 md:px-4 rounded-lg text-xs md:text-sm font-medium transition-all ${mode === 'join' ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-400 hover:text-white'}`}
+                        >
+                            Tham Gia
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => {
+                                setMode('create');
+                                if (!room) setRoom(generateRoomId());
+                            }}
+                            className={`flex-1 py-2 px-2 md:px-4 rounded-lg text-xs md:text-sm font-medium transition-all ${mode === 'create' ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-400 hover:text-white'}`}
+                        >
+                            Tạo Nhanh
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => {
+                                setMode('schedule');
+                                if (!room) setRoom(generateRoomId());
+                            }}
+                            className={`flex-1 py-2 px-2 md:px-4 rounded-lg text-xs md:text-sm font-medium transition-all ${mode === 'schedule' ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-400 hover:text-white'}`}
+                        >
+                            Lên Lịch
+                        </button>
+                    </div>
+                )}
 
-                <form onSubmit={onSubmit} className="space-y-4">
+                <form onSubmit={handleLocalSubmit} className="space-y-4">
                     <div>
                         <label className="block text-sm font-medium text-slate-300 mb-1">Tên của bạn</label>
                         <input
@@ -69,18 +211,18 @@ const JoinForm: React.FC<JoinFormProps> = ({
                         />
                     </div>
                     <div>
-                        <label className="block text-sm font-medium text-slate-300 mb-1">{isCreateMode ? "Mã Phòng (Tạo tự động)" : "Nhập Mã Phòng"}</label>
+                        <label className="block text-sm font-medium text-slate-300 mb-1">{mode !== 'join' ? "Mã Phòng (Tạo tự động)" : "Nhập Mã Phòng"}</label>
                         <div className="relative group">
                             <input
                                 required
                                 type="text"
                                 value={room}
-                                onChange={isCreateMode ? undefined : e => setRoom(e.target.value)}
-                                className={`w-full border rounded-lg px-4 py-3 focus:ring-2 focus:ring-blue-500 outline-none transition-all pr-20 ${isCreateMode ? 'bg-slate-800/50 border-slate-700/50 text-blue-400 font-mono cursor-default select-all' : 'bg-slate-800 border-slate-700 text-white'}`}
+                                onChange={mode !== 'join' ? undefined : e => setRoom(e.target.value)}
+                                className={`w-full border rounded-lg px-4 py-3 focus:ring-2 focus:ring-blue-500 outline-none transition-all pr-20 ${mode !== 'join' ? 'bg-slate-800/50 border-slate-700/50 text-blue-400 font-mono cursor-default select-all' : 'bg-slate-800 border-slate-700 text-white'}`}
                                 placeholder="e.g. abcd-efgh-ijkl-mnop"
-                                readOnly={isCreateMode}
+                                readOnly={mode !== 'join'}
                             />
-                            {isCreateMode && (
+                            {mode !== 'join' && (
                                 <div className="absolute right-2 top-2 flex items-center gap-1">
                                     <button
                                         type="button"
@@ -108,11 +250,73 @@ const JoinForm: React.FC<JoinFormProps> = ({
                                 </div>
                             )}
                         </div>
-                        {isCreateMode && <p className="text-[10px] text-slate-500 mt-1 italic">* Mã phòng được cấp tự động để đảm bảo tính duy nhất.</p>}
+                        {mode !== 'join' && <p className="text-[10px] text-slate-500 mt-1 italic">* Mã phòng được cấp tự động để đảm bảo tính duy nhất.</p>}
                     </div>
 
+                    {/* Lên Lịch Fields */}
+                    {mode === 'schedule' && (
+                        <div className="space-y-4 pt-4 border-t border-slate-700/50 mt-4 animate-in slide-in-from-top-2 fade-in duration-300">
+                            <div>
+                                <label className="block text-sm font-medium text-slate-300 mb-1">Tên buổi họp <span className="text-red-500">*</span></label>
+                                <input
+                                    type="text"
+                                    required
+                                    value={title}
+                                    onChange={e => setTitle(e.target.value)}
+                                    className="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-2 text-slate-200 focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
+                                    placeholder="Ví dụ: Họp Sprint Review"
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium text-slate-300 mb-1">Mô tả ngắn (Note)</label>
+                                <input
+                                    type="text"
+                                    value={description}
+                                    onChange={e => setDescription(e.target.value)}
+                                    className="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-2 text-slate-200 focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
+                                    placeholder="Ghi chú thêm về nội dung..."
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium text-slate-300 mb-1">Thời gian bắt đầu <span className="text-red-500">*</span></label>
+                                <input
+                                    type="datetime-local"
+                                    required
+                                    value={startTime}
+                                    onChange={e => setStartTime(e.target.value)}
+                                    className="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-2 text-slate-200 focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
+                                    style={{ colorScheme: "dark" }}
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium text-slate-300 mb-1">Nhắc nhở qua Email trước:</label>
+                                <select
+                                    value={remindBeforeMinutes}
+                                    onChange={e => setRemindBeforeMinutes(Number(e.target.value))}
+                                    className="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-2 text-slate-200 focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
+                                >
+                                    <option value={5}>5 Phút</option>
+                                    <option value={15}>15 Phút</option>
+                                    <option value={30}>30 Phút</option>
+                                    <option value={60}>1 Giờ</option>
+                                    <option value={0}>Không nhắc</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium text-slate-300 mb-1">
+                                    Email người tham dự
+                                    {(() => {
+                                        const count = invitedEmails.split(',').map(e => e.trim()).filter(Boolean).length;
+                                        return count > 0 ? <span className="ml-2 text-[11px] bg-indigo-500/20 text-indigo-400 px-1.5 py-0.5 rounded-full">{count} người</span> : null;
+                                    })()}
+                                </label>
+                                <EmailTagInput value={invitedEmails} onChange={setInvitedEmails} />
+                            </div>
+                        </div>
+                    )}
+
                     {/* Password input for JOIN mode */}
-                    {!isCreateMode && (
+                    {mode === 'join' && (
                         <div>
                             <label className="block text-sm font-medium text-slate-300 mb-1">Mật khẩu phòng (Nếu có)</label>
                             <div className="relative">
@@ -135,7 +339,7 @@ const JoinForm: React.FC<JoinFormProps> = ({
                         </div>
                     )}
 
-                    {isCreateMode && (
+                    {mode !== 'join' && (
                         <div className="space-y-3 pt-2 border-t border-slate-700/50 mt-4 animate-in slide-in-from-top-2 fade-in duration-300">
                             <p className="text-sm font-medium text-slate-400 mb-2 flex items-center gap-2">
                                 <Settings size={14} /> Cài đặt phòng
@@ -242,10 +446,20 @@ const JoinForm: React.FC<JoinFormProps> = ({
 
                     <button
                         type="submit"
-                        className="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-3 rounded-lg shadow-lg shadow-blue-500/20 transition-all active:scale-[0.98] mt-4 flex items-center justify-center gap-2"
+                        disabled={isScheduling}
+                        className={`w-full text-white font-bold py-3 rounded-lg shadow-lg shadow-blue-500/20 transition-all active:scale-[0.98] mt-4 flex items-center justify-center gap-2
+                            ${mode === 'schedule' ? 'bg-indigo-600 hover:bg-indigo-500' : 'bg-blue-600 hover:bg-blue-500'}
+                            ${isScheduling ? 'opacity-50 cursor-not-allowed' : ''}
+                        `}
                     >
-                        {isCreateMode ? <Plus size={20} /> : null}
-                        {isCreateMode ? "Tạo Phòng Ngay" : "Tham Gia Ngay"}
+                        {mode === 'schedule' && isScheduling ? (
+                            <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                        ) : (
+                            <>
+                                {mode !== 'join' ? <Plus size={20} /> : null}
+                                {mode === 'create' ? "Tạo Phòng Ngay" : mode === 'schedule' ? "Gửi Thư & Lên Lịch" : "Tham Gia Ngay"}
+                            </>
+                        )}
                     </button>
                 </form>
             </div>
@@ -254,3 +468,4 @@ const JoinForm: React.FC<JoinFormProps> = ({
 };
 
 export default JoinForm;
+
