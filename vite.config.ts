@@ -1,37 +1,29 @@
 import path from 'path';
-import fs from 'fs';
-import { defineConfig, loadEnv } from 'vite';
+import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 
 export default defineConfig(({ mode }) => {
-  const env = loadEnv(mode, '.', '');
+  const isDev = mode === 'development';
   return {
-    base: './', // Use relative paths for static deployment (Web Server for Chrome)
-    server: {
+    base: './',
+    server: isDev ? {
       port: 3000,
-      host: '0.0.0.0', // Allow LAN access
-      https: {
-        key: fs.readFileSync('key.pem'),
-        cert: fs.readFileSync('cert.pem'),
-      },
+      host: '0.0.0.0',
       proxy: {
         '/socket.io': {
-          target: 'https://localhost:3001',
-          secure: false,
+          target: 'http://localhost:3000',
           changeOrigin: true,
           ws: true
         },
         '/api': {
-          target: 'https://localhost:3001',
-          secure: false,
+          target: 'http://localhost:3000',
           changeOrigin: true
         }
       }
-    },
+    } : {},
     plugins: [
       react()
     ],
-
     resolve: {
       alias: {
         '@': path.resolve(__dirname, '.'),
