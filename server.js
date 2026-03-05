@@ -52,7 +52,7 @@ function decryptText(text) {
 
 const app = express();
 const JWT_SECRET = process.env.JWT_SECRET || 'avo-secret-zero-trust-key-2024';
-const PORT = 3001;
+const PORT = process.env.PORT || 3000;
 
 // 1. Middlewares
 app.use(cors());
@@ -67,12 +67,8 @@ const uploadsPath = path.join(__dirname, 'uploads');
 if (!fs.existsSync(uploadsPath)) fs.mkdirSync(uploadsPath);
 app.use('/uploads', express.static(uploadsPath));
 
-// 3. HTTPS & Socket.io Setup
-const options = {
-    key: fs.readFileSync('key.pem'),
-    cert: fs.readFileSync('cert.pem')
-};
-const server = https.createServer(options, app);
+// 3. HTTP Server & Socket.io Setup (SSL will be handled by Nginx on production)
+const server = http.createServer(app);
 const io = new Server(server, {
     cors: { origin: "*", methods: ["GET", "POST"] },
     maxHttpBufferSize: 10 * 1024 * 1024 // 10MB to allow Base64 avatars
@@ -476,7 +472,7 @@ cron.schedule('* * * * *', async () => {
                         <p>Bắt đầu: <b>${new Date(meeting.startTime).toLocaleString('vi-VN')}</b></p>
                         <p>Lời nhắn: <i>${meeting.description || 'Không có mô tả'}</i></p>
                         <hr/>
-                        <a href="https://guestless-arya-gemmiferous.ngrok-free.dev/?room=${meeting.roomId}${passwordParam}" style="display:inline-block;padding:10px 20px;background:#2563eb;color:white;text-decoration:none;border-radius:5px;font-weight:bold;">Tới Lịch Họp (Tham Gia)</a>
+                        <a href="${process.env.APP_URL || 'https://avomeet.site'}/?room=${meeting.roomId}${passwordParam}" style="display:inline-block;padding:10px 20px;background:#2563eb;color:white;text-decoration:none;border-radius:5px;font-weight:bold;">Tới Lịch Họp (Tham Gia)</a>
                     `
                 };
                 await transporter.sendMail(mailOptions);
@@ -512,7 +508,7 @@ cron.schedule('* * * * *', async () => {
                             <p>Cuộc họp <b>${meeting.title}</b> sẽ diễn ra trong vòng <b>${Math.ceil(timeDiffMinutes)} phút</b> nữa.</p>
                             <p>Đừng để mọi người phải đợi nhé!</p>
                             <hr/>
-                            <a href="https://guestless-arya-gemmiferous.ngrok-free.dev/?room=${meeting.roomId}${passwordParam}" style="display:inline-block;padding:10px 20px;background:#e11d48;color:white;text-decoration:none;border-radius:5px;font-weight:bold;">Vào phòng ngay</a>
+                            <a href="${process.env.APP_URL || 'https://avomeet.site'}/?room=${meeting.roomId}${passwordParam}" style="display:inline-block;padding:10px 20px;background:#e11d48;color:white;text-decoration:none;border-radius:5px;font-weight:bold;">Vào phòng ngay</a>
                         `
                     };
                     await transporter.sendMail(mailOptions);
@@ -537,18 +533,6 @@ cron.schedule('* * * * *', async () => {
         console.error("Cron Job Error:", e);
     }
 });
-
 server.listen(PORT, '0.0.0.0', () => {
-    console.log(`🚀 HTTPS Server: https://localhost:${PORT}`);
-});
-
-// HTTP Server cho ngrok (port 3000) — không cần SSL cert
-// Dùng io.attach() để chia sẻ cùng socket handlers với HTTPS server
-const HTTP_PORT = 3000;
-const httpServer = http.createServer(app);
-io.attach(httpServer); // Socket.IO giờ lắng nghe trên cả 2 ports!
-
-httpServer.listen(HTTP_PORT, '0.0.0.0', () => {
-    console.log(`🌐 HTTP Server (ngrok): http://localhost:${HTTP_PORT}`);
-    console.log(`💡 Chạy ngrok: .\\ngrok http ${HTTP_PORT}`);
+    console.log(`🚀 Node.js App Server is running on port: ${PORT}`);
 });

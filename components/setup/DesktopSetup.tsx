@@ -30,7 +30,7 @@ const DesktopSetup: React.FC<DesktopSetupProps> = ({
     user, onOpenProfile, onOpenSchedule, onLogout,
 }) => {
     const { mode, setMode, setRoom, room } = joinFormProps;
-    const [collapsed, setCollapsed] = useState(false);
+    const [collapsed, setCollapsed] = useState(true);
 
     const generateRoomId = () => {
         const s = () => Math.random().toString(36).substring(2, 6);
@@ -40,15 +40,30 @@ const DesktopSetup: React.FC<DesktopSetupProps> = ({
     const handleNav = (id: 'join' | 'create' | 'schedule') => {
         setMode(id);
         if (id !== 'join' && !room) setRoom(generateRoomId());
+        // Đóng menu sau khi chọn
+        if (window.innerWidth < 1024) {
+            setCollapsed(true);
+        } else {
+            setCollapsed(true);
+        }
     };
 
     return (
-        <div className="flex w-full h-screen overflow-hidden">
+        <div className="flex w-full h-screen overflow-hidden relative">
+
+            {/* Sidebar Placeholder to keep layout stable (always 56px) */}
+            <div className="w-[56px] shrink-0 h-screen bg-slate-900 border-r border-slate-800" />
+
+            {/* Overlay to close sidebar on click outside */}
+            <div
+                className={`absolute inset-0 z-40 bg-black/40 backdrop-blur-[2px] transition-opacity duration-300 ${!collapsed ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'}`}
+                onClick={() => setCollapsed(true)}
+            />
 
             {/* ===== LEFT SIDEBAR ===== */}
             <aside
                 style={{ width: collapsed ? '56px' : '240px', transition: 'width 0.25s cubic-bezier(0.4,0,0.2,1)' }}
-                className="shrink-0 flex flex-col bg-slate-900 border-r border-slate-800 overflow-visible relative"
+                className="absolute top-0 left-0 bottom-0 z-50 flex flex-col bg-slate-900 border-r border-slate-800 overflow-visible"
             >
                 {/* Logo row */}
                 {/* Logo — click to toggle sidebar */}

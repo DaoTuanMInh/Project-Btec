@@ -29,3 +29,4 @@ dist-ssr
 clearDb.js
 ngrok.exe
 *.pem
+scripts/generate-cert.js
