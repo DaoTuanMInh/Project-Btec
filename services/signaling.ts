@@ -38,7 +38,7 @@ class SignalingService {
     this.socket.on('force-logout', (msg: any) => {
       console.warn("Force Logout:", msg.reason);
 
-      // Show a beautiful overlay notification instead of bare alert()
+      // Custom overlay thay cho alert() xấu xí
       const overlay = document.createElement('div');
       overlay.style.cssText = `
         position: fixed; inset: 0; z-index: 99999;
