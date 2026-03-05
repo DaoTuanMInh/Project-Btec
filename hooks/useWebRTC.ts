@@ -87,17 +87,31 @@ export const useWebRTC = ({
                 { urls: 'stun:stun1.l.google.com:19302' },
                 { urls: 'stun:stun2.l.google.com:19302' },
                 { urls: 'stun:stun3.l.google.com:19302' },
-                /* 
-                  ĐÃ TẠM ĐÓNG TURN SERVER VÌ HẾT DUNG LƯỢNG FREE
-                  Nếu cần, bạn hãy đăng ký tài khoản mới trên Metered.ca hoặc Twilio để lấy username/credential mới
-                { urls: 'stun:stunr.metered.ca:80' },
+
+                // METERED.CA TURN SERVERS 
+                {
+                    urls: "stun:stun.relay.metered.ca:80",
+                },
                 {
                     urls: "turn:global.relay.metered.ca:80",
-                    username: "99b2cad2d01fe8519d64d80d",
-                    credential: "yxInLub4NbpSjLFM"
+                    username: "ced9c97d1117ab8c44246147",
+                    credential: "EGcsAepJdb+9jDuq",
                 },
-                ...
-                */
+                {
+                    urls: "turn:global.relay.metered.ca:80?transport=tcp",
+                    username: "ced9c97d1117ab8c44246147",
+                    credential: "EGcsAepJdb+9jDuq",
+                },
+                {
+                    urls: "turn:global.relay.metered.ca:443",
+                    username: "ced9c97d1117ab8c44246147",
+                    credential: "EGcsAepJdb+9jDuq",
+                },
+                {
+                    urls: "turns:global.relay.metered.ca:443?transport=tcp",
+                    username: "ced9c97d1117ab8c44246147",
+                    credential: "EGcsAepJdb+9jDuq",
+                },
             ]
         });
 
