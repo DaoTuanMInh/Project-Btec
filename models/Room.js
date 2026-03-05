@@ -15,6 +15,8 @@ const RoomSchema = new mongoose.Schema({
         autoCloseWhenEmpty: { type: Boolean, default: true }
     },
 
+    participants: [{ type: String }], // Danh sách userId đã tham gia phòng (kể cả guest)
+
     isActive: { type: Boolean, default: true },
     createdAt: { type: Date, default: Date.now },
     endedAt: { type: Date }

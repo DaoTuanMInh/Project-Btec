@@ -229,7 +229,13 @@ app.post('/api/user/change-password', async (req, res) => {
 
 app.get('/api/user/meetings/:userId', async (req, res) => {
     try {
-        const meetings = await Room.find({ hostId: req.params.userId }).sort({ createdAt: -1 });
+        const userId = req.params.userId;
+        const meetings = await Room.find({
+            $or: [
+                { hostId: userId },
+                { participants: userId }
+            ]
+        }).sort({ createdAt: -1 });
         res.json(meetings);
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
@@ -371,15 +377,22 @@ io.on('connection', (socket) => {
         if (isHost) {
             let room = await Room.findOne({ roomId, isActive: true });
             if (!room) {
-                room = new Room({ roomId, host: userName, hostId: userId, settings, password: settings?.password || '' });
+                room = new Room({ roomId, host: userName, hostId: userId, settings, password: settings?.password || '', participants: [userId] });
                 await room.save();
+            } else {
+                // Thêm host vào participants nếu chưa có
+                await Room.updateOne({ roomId, isActive: true }, { $addToSet: { participants: userId } });
             }
+        } else {
+            // Guest tham gia: ghi nhận vào participants
+            try {
+                await Room.updateOne({ roomId, isActive: true }, { $addToSet: { participants: userId } });
+            } catch (e) { }
         }
 
         if (!roomMap[roomId]) roomMap[roomId] = [];
         roomMap[roomId] = roomMap[roomId].filter(u => u.id !== userId);
         roomMap[roomId].push({ id: userId, name: userName, socketId: socket.id, avatar });
-
 
         socket.to(roomId).emit('user-connected', userId, userName);
         socket.emit('existing-users', roomMap[roomId].filter(u => u.id !== userId));
