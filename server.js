@@ -18,6 +18,7 @@ const Room = require('./models/Room');
 const ScheduledMeeting = require('./models/ScheduledMeeting');
 const crypto = require('crypto');
 const cron = require('node-cron');
+const { GoogleGenerativeAI } = require('@google/generative-ai');
 
 // Setup Encryption configuration
 const ENCRYPTION_KEY = crypto.createHash('sha256').update(process.env.JWT_SECRET || 'avo-secret-zero-trust-key-2024').digest('base64').substring(0, 32);
@@ -154,6 +155,117 @@ app.post('/api/verify-otp', (req, res) => {
     res.json({ success: true });
 });
 
+// Forgot Password: Gửi OTP đến email đã đăng ký
+app.post('/api/forgot-password', async (req, res) => {
+    const { email } = req.body;
+    if (!email) return res.status(400).json({ error: "Email is required" });
+
+    const user = await User.findOne({ email });
+    if (!user) return res.status(404).json({ error: "Email này chưa được đăng ký" });
+
+    const now = Date.now();
+    const existing = otpStore.get(`reset_${email}`);
+    if (existing && (now - existing.lastSentAt < 60000)) {
+        return res.status(429).json({ error: "Vui lòng đợi 60s trước khi gửi lại mã" });
+    }
+
+    const code = Math.floor(100000 + Math.random() * 900000).toString();
+    otpStore.set(`reset_${email}`, { code, expiresAt: now + 5 * 60 * 1000, lastSentAt: now });
+
+    try {
+        await transporter.sendMail({
+            from: `"AVO Meeting" <${process.env.EMAIL_USER}>`,
+            to: email,
+            subject: '🔑 Đặt lại mật khẩu AVO Meeting',
+            html: `
+                <div style="font-family:Arial,sans-serif;max-width:480px;margin:auto;padding:32px;background:#0f172a;color:#e2e8f0;border-radius:16px">
+                    <h2 style="color:#60a5fa;margin-bottom:8px">🔑 Quên mật khẩu?</h2>
+                    <p style="color:#94a3b8">Chúng tôi nhận được yêu cầu đặt lại mật khẩu cho tài khoản <b style="color:#e2e8f0">${email}</b>.</p>
+                    <div style="background:#1e293b;border:1px solid #334155;border-radius:12px;padding:24px;text-align:center;margin:24px 0">
+                        <p style="color:#94a3b8;margin:0 0 8px">Mã xác thực của bạn là:</p>
+                        <p style="font-size:36px;font-weight:bold;letter-spacing:12px;color:#60a5fa;margin:0">${code}</p>
+                        <p style="color:#64748b;font-size:12px;margin:12px 0 0">Có hiệu lực trong <b>5 phút</b></p>
+                    </div>
+                    <p style="color:#64748b;font-size:13px">Nếu bạn không yêu cầu điều này, hãy bỏ qua email này.</p>
+                </div>
+            `
+        });
+        res.json({ success: true });
+    } catch (error) {
+        res.status(500).json({ error: "Gửi mail thất bại" });
+    }
+});
+
+// Reset Password: Xác thực OTP và cập nhật mật khẩu mới
+app.post('/api/reset-password', async (req, res) => {
+    const { email, code, newPassword } = req.body;
+    if (!email || !code || !newPassword) return res.status(400).json({ error: "Thiếu thông tin" });
+
+    const record = otpStore.get(`reset_${email}`);
+    if (!record) return res.status(400).json({ error: "Mã đã hết hạn hoặc không tồn tại" });
+    if (Date.now() > record.expiresAt) {
+        otpStore.delete(`reset_${email}`);
+        return res.status(400).json({ error: "Mã xác thực đã hết hạn" });
+    }
+    if (record.code !== code) return res.status(400).json({ error: "Mã xác thực không đúng" });
+
+    if (newPassword.length < 6) return res.status(400).json({ error: "Mật khẩu phải có ít nhất 6 ký tự" });
+
+    try {
+        const salt = await bcrypt.genSalt(10);
+        const hashedPassword = await bcrypt.hash(newPassword, salt);
+        await User.updateOne({ email }, { password: hashedPassword });
+        otpStore.delete(`reset_${email}`);
+        res.json({ success: true });
+    } catch (err) {
+        res.status(500).json({ error: "Cập nhật mật khẩu thất bại" });
+    }
+});
+
+
+// ===== AI API =====
+app.post('/api/ai/summarize-chat', verifyToken, async (req, res) => {
+    if (!process.env.GROQ_API_KEY) return res.status(503).json({ error: 'AI chưa được cấu hình (thiếu GROQ_API_KEY)' });
+    const { messages } = req.body; // [{sender, text, timestamp}]
+    if (!messages || messages.length === 0) return res.status(400).json({ error: 'Không có nội dung chat để tóm tắt' });
+
+    const chatText = messages.map(m => `${m.senderName}: ${m.text}`).join('\n');
+    const prompt = `Bạn là trợ lý AI thông minh. Hãy đọc nội dung cuộc trò chuyện sau trong một cuộc họp trực tuyến và tóm tắt bằng tiếng Việt. Hãy:
+1. Liệt kê các điểm chính đã thảo luận
+2. Nếu có kết luận hay quyết định nào, hãy ghi rõ
+3. Trình bày gọn gàng, dễ đọc
+
+Nội dung cuộc trò chuyện:
+${chatText}`;
+
+    try {
+        const apiKey = process.env.GROQ_API_KEY;
+        const groqRes = await fetch(
+            `https://api.groq.com/openai/v1/chat/completions`,
+            {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${apiKey}`
+                },
+                body: JSON.stringify({
+                    model: "llama-3.3-70b-versatile",
+                    messages: [{ role: "user", content: prompt }],
+                    temperature: 0.4,
+                    max_tokens: 1024
+                })
+            }
+        );
+        const data = await groqRes.json();
+        if (!groqRes.ok) throw new Error(data?.error?.message || 'Groq API lỗi');
+        const summary = data?.choices?.[0]?.message?.content || 'Không có kết quả';
+        res.json({ summary });
+    } catch (err) {
+        console.error('Groq API Error:', err.message);
+        res.status(500).json({ error: `AI lỗi: ${err.message}` });
+    }
+});
+
 // Auth Logic
 app.post('/api/auth/register', async (req, res) => {
     try {
@@ -229,13 +341,7 @@ app.post('/api/user/change-password', async (req, res) => {
 
 app.get('/api/user/meetings/:userId', async (req, res) => {
     try {
-        const userId = req.params.userId;
-        const meetings = await Room.find({
-            $or: [
-                { hostId: userId },
-                { participants: userId }
-            ]
-        }).sort({ createdAt: -1 });
+        const meetings = await Room.find({ hostId: req.params.userId }).sort({ createdAt: -1 });
         res.json(meetings);
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
@@ -316,7 +422,8 @@ app.get('/api/chat/history/:roomId', async (req, res) => {
         const messages = await Message.find({ roomId: req.params.roomId }).sort({ timestamp: 1 });
         const decryptedMessages = messages.map(msg => ({
             ...msg._doc,
-            text: decryptText(msg.text)
+            text: decryptText(msg.text),
+            replyTo: msg.replyTo ? { id: msg.replyTo.id, userName: msg.replyTo.userName, text: decryptText(msg.replyTo.text) } : undefined
         }));
         res.json(decryptedMessages);
     } catch (e) { res.status(500).json({ error: e.message }); }
@@ -377,22 +484,15 @@ io.on('connection', (socket) => {
         if (isHost) {
             let room = await Room.findOne({ roomId, isActive: true });
             if (!room) {
-                room = new Room({ roomId, host: userName, hostId: userId, settings, password: settings?.password || '', participants: [userId] });
+                room = new Room({ roomId, host: userName, hostId: userId, settings, password: settings?.password || '' });
                 await room.save();
-            } else {
-                // Thêm host vào participants nếu chưa có
-                await Room.updateOne({ roomId, isActive: true }, { $addToSet: { participants: userId } });
             }
-        } else {
-            // Guest tham gia: ghi nhận vào participants
-            try {
-                await Room.updateOne({ roomId, isActive: true }, { $addToSet: { participants: userId } });
-            } catch (e) { }
         }
 
         if (!roomMap[roomId]) roomMap[roomId] = [];
         roomMap[roomId] = roomMap[roomId].filter(u => u.id !== userId);
         roomMap[roomId].push({ id: userId, name: userName, socketId: socket.id, avatar });
+
 
         socket.to(roomId).emit('user-connected', userId, userName);
         socket.emit('existing-users', roomMap[roomId].filter(u => u.id !== userId));
@@ -405,12 +505,56 @@ io.on('connection', (socket) => {
         if (type === 'chat') {
             try {
                 const userInfo = socketMap[socket.id] || {};
+                const chatTextRaw = payload.text || '';
                 await new Message({
-                    roomId, senderId: from, text: encryptText(payload.text),
+                    roomId, senderId: from, text: encryptText(chatTextRaw),
                     userName: payload.userName || userInfo.userName || "Người dùng",
                     type: payload.fileUrl ? (payload.isImage ? 'image' : 'file') : 'text',
-                    fileUrl: payload.fileUrl, fileName: payload.fileName, fileSize: payload.fileSize
+                    fileUrl: payload.fileUrl, fileName: payload.fileName, fileSize: payload.fileSize,
+                    replyTo: payload.replyTo ? { id: payload.replyTo.id, userName: payload.replyTo.userName, text: encryptText(payload.replyTo.text) } : undefined
                 }).save();
+
+                // === AI CHATBOT INTEGRATION ===
+                if ((chatTextRaw.toLowerCase().startsWith('@ai') || chatTextRaw.toLowerCase().startsWith('/ai')) && process.env.GROQ_API_KEY) {
+                    const aiQuery = chatTextRaw.replace(/^(@ai|\/ai)\s*/i, '').trim();
+                    if (aiQuery) {
+                        try {
+                            const groqRes = await fetch(
+                                `https://api.groq.com/openai/v1/chat/completions`,
+                                {
+                                    method: 'POST',
+                                    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${process.env.GROQ_API_KEY}` },
+                                    body: JSON.stringify({
+                                        model: "llama-3.3-70b-versatile",
+                                        messages: [
+                                            { role: "system", content: "Bạn là trợ lý ảo thân thiện của ứng dụng AVO Meeting định dạng câu trả lời bằng markdown hoặc văn bản thuần. Hãy trả lời ngắn gọn, thông minh và dí dỏm bằng tiếng Việt." },
+                                            { role: "user", content: aiQuery }
+                                        ],
+                                        temperature: 0.6,
+                                        max_tokens: 1024
+                                    })
+                                }
+                            );
+                            const data = await groqRes.json();
+                            if (groqRes.ok && data?.choices?.[0]?.message?.content) {
+                                const aiResText = data.choices[0].message.content;
+                                const aiMsg = {
+                                    roomId, type: 'chat',
+                                    payload: { text: aiResText, userName: '✨ Trợ lý AVO' },
+                                    from: 'ai-assistant', to: null
+                                };
+                                io.to(roomId).emit('signal', aiMsg); // Phát cho TẤT CẢ mọi người trong phòng (gồm cả người gửi)
+
+                                await new Message({
+                                    roomId, senderId: 'ai-assistant', text: encryptText(aiResText),
+                                    userName: '✨ Trợ lý AVO', type: 'text'
+                                }).save();
+                            }
+                        } catch (err) {
+                            console.error("AI Assistant Error:", err.message);
+                        }
+                    }
+                }
             } catch (e) { }
         }
         if (type === 'leave') {

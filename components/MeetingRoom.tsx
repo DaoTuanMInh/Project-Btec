@@ -427,14 +427,14 @@ const MeetingRoom: React.FC<Props> = ({ user, roomId, localStream, onLeave, sett
         activeTab={state.activeTab}
         setActiveTab={state.setActiveTab}
         messages={state.messages}
-        onSendMessage={(t) => {
-          const msg = { type: 'chat', text: t, timestamp: new Date(), id: Math.random().toString(), userName: user.name };
+        onSendMessage={(t, replyTo) => {
+          const msg = { type: 'chat', text: t, timestamp: new Date(), id: Math.random().toString(), userName: user.name, replyTo };
           // E2EE Broadcast
           Object.values(rtc.dataChannelsRef.current).forEach(dc => dc.readyState === 'open' && dc.send(JSON.stringify(msg)));
           // Signaling Backup + Server Persistence
-          signaling.send('chat', user.id, undefined, roomId, { text: t, timestamp: msg.timestamp, userName: user.name, id: msg.id });
+          signaling.send('chat', user.id, undefined, roomId, { text: t, timestamp: msg.timestamp, userName: user.name, id: msg.id, replyTo });
 
-          state.setMessages(p => [...p, { id: msg.id, sender: user.id, userName: user.name, text: t, timestamp: msg.timestamp }]);
+          state.setMessages(p => [...p, { id: msg.id, sender: user.id, userName: user.name, text: t, timestamp: msg.timestamp, replyTo }]);
           state.setUnreadCount(0); // Clear on send
         }}
         onSendFile={async (file) => {

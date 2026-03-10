@@ -103,6 +103,29 @@ export const confirmOtp = async (email: string, code: string) => {
   if (!res.ok) throw new Error(data.error || 'Xác thực mã thất bại');
   return true;
 };
+
+export const forgotPassword = async (email: string) => {
+  const res = await fetch('/api/forgot-password', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email })
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || 'Gửi mã thất bại');
+  return true;
+};
+
+export const resetPassword = async (email: string, code: string, newPassword: string) => {
+  const res = await fetch('/api/reset-password', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email, code, newPassword })
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || 'Đặt lại mật khẩu thất bại');
+  return true;
+};
+
 // --- Profile Management ---
 
 export const updateProfile = async (userId: string, avatar: string): Promise<any> => {

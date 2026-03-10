@@ -13,6 +13,11 @@ const MessageSchema = new mongoose.Schema({
     fileUrl: { type: String },
     fileName: { type: String },
     fileSize: { type: Number },
+    replyTo: {
+        id: String,
+        userName: String,
+        text: String
+    },
     timestamp: { type: Date, default: Date.now }
 });
 

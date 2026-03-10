@@ -1,9 +1,10 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 import { Message, User, PeerStream } from '../../types';
-import { X, MessageSquare, Send, Mic, Video, MicOff, VideoOff, UserX, UserCheck, Search, Paperclip, File, Download, ExternalLink, Image as ImageIcon } from 'lucide-react';
+import { X, MessageSquare, Send, Mic, Video, MicOff, VideoOff, UserX, UserCheck, Search, Paperclip, File, Download, ExternalLink, Image as ImageIcon, Sparkles, Loader2, CornerUpLeft } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import ConfirmModal from '../ui/ConfirmModal';
+import { getToken } from '../../services/authService';
 
 interface SidebarProps {
   isOpen: boolean;
@@ -11,7 +12,7 @@ interface SidebarProps {
   activeTab: 'chat' | 'participants' | 'requests'; // Added requests
   setActiveTab: (tab: 'chat' | 'participants' | 'requests') => void;
   messages: Message[];
-  onSendMessage: (text: string) => void;
+  onSendMessage: (text: string, replyTo?: Message['replyTo']) => void;
 
   currentUser: User;
   participants: PeerStream[];
@@ -51,6 +52,29 @@ const Sidebar: React.FC<SidebarProps> = ({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const chatEndRef = useRef<HTMLDivElement>(null);
 
+  // Reply State
+  const [replyingTo, setReplyingTo] = useState<Message | null>(null);
+
+  // AI Summary State
+  const [aiSummary, setAiSummary] = useState<string | null>(null);
+  const [aiLoading, setAiLoading] = useState(false);
+  const [showAiPanel, setShowAiPanel] = useState(false);
+
+  // Mention State
+  const [mentionQuery, setMentionQuery] = useState<{ active: boolean, query: string, index: number }>({ active: false, query: '', index: 0 });
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  const renderTextWithMentions = (text: string) => {
+    if (!text) return text;
+    const words = text.split(/(@\S+)/g);
+    return words.map((word, i) => {
+      if (word.startsWith('@')) {
+        return <span key={i} className="text-violet-300 font-bold bg-violet-500/20 px-1.5 py-0.5 rounded-md inline-block my-0.5">{word}</span>;
+      }
+      return <span key={i}>{word}</span>;
+    });
+  };
+
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, activeTab]);
@@ -58,8 +82,33 @@ const Sidebar: React.FC<SidebarProps> = ({
   const handleSend = (e: React.FormEvent) => {
     e.preventDefault();
     if (inputText.trim()) {
-      onSendMessage(inputText.trim());
+      onSendMessage(
+        inputText.trim(),
+        replyingTo ? { id: replyingTo.id, userName: replyingTo.userName || 'Unknown', text: replyingTo.fileUrl ? (replyingTo.fileName || 'Tệp đính kèm') : (replyingTo.text || '') } : undefined
+      );
       setInputText("");
+      setMentionQuery({ active: false, query: '', index: 0 });
+      setReplyingTo(null);
+    }
+  };
+
+  const insertMention = (username: string) => {
+    const textBeforeMention = inputText.slice(0, mentionQuery.index);
+    const textAfterMention = inputText.slice(mentionQuery.index + mentionQuery.query.length + 1);
+    setInputText(`${textBeforeMention}@${username} ${textAfterMention}`);
+    setMentionQuery({ active: false, query: '', index: 0 });
+    inputRef.current?.focus();
+  };
+
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const val = e.target.value;
+    setInputText(val);
+
+    const match = val.match(/@(\w*)$/);
+    if (match) {
+      setMentionQuery({ active: true, query: match[1], index: match.index! });
+    } else {
+      setMentionQuery({ active: false, query: '', index: 0 });
     }
   };
 
@@ -73,6 +122,33 @@ const Sidebar: React.FC<SidebarProps> = ({
         setIsUploading(false);
         if (fileInputRef.current) fileInputRef.current.value = "";
       }
+    }
+  };
+
+  const handleAiSummary = async () => {
+    const textMessages = messages.filter(m => m.text && m.text.trim());
+    if (textMessages.length === 0) return;
+    setAiLoading(true);
+    setShowAiPanel(true);
+    setAiSummary(null);
+    try {
+      const token = getToken();
+      const payload = textMessages.map(m => ({
+        senderName: m.sender === currentUser.id ? currentUser.name : (participants.find(p => p.userId === m.sender)?.userName || 'Người dùng'),
+        text: m.text
+      }));
+      const res = await fetch('/api/ai/summarize-chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        body: JSON.stringify({ messages: payload })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      setAiSummary(data.summary);
+    } catch (err: any) {
+      setAiSummary(`❌ Lỗi: ${err.message}`);
+    } finally {
+      setAiLoading(false);
     }
   };
 
@@ -244,6 +320,7 @@ const Sidebar: React.FC<SidebarProps> = ({
 
         {activeTab === 'chat' && (
           <div className="pb-32 space-y-2 px-1">
+
             <AnimatePresence initial={false}>
               {messages.length === 0 ? (
                 <MotionDiv
@@ -288,7 +365,38 @@ const Sidebar: React.FC<SidebarProps> = ({
                         )}
                       </div>
 
-                      <div className={`flex flex-col min-w-0 max-w-[80%] ${isMe ? 'items-end' : 'items-start'}`}>
+                      <MotionDiv
+                        drag="x"
+                        dragConstraints={{ left: 0, right: 0 }}
+                        dragElastic={0.1}
+                        onDragEnd={(e: any, info: any) => {
+                          if (Math.abs(info.offset.x) > 50) {
+                            setReplyingTo(msg);
+                            if (msg.sender !== currentUser.id) {
+                              const tagStr = msg.sender === 'ai-assistant' ? '@ai ' : `@${senderName.replace(/\s+/g, '')} `;
+                              setInputText(prev => prev.startsWith(tagStr) ? prev : tagStr + prev);
+                            }
+                            inputRef.current?.focus();
+                          }
+                        }}
+                        className={`group relative flex flex-col min-w-0 max-w-[80%] ${isMe ? 'items-end' : 'items-start'}`}
+                      >
+                        {/* Reply Button (Desktop) */}
+                        <button
+                          onClick={() => {
+                            setReplyingTo(msg);
+                            if (msg.sender !== currentUser.id) {
+                              const tagStr = msg.sender === 'ai-assistant' ? '@ai ' : `@${senderName.replace(/\s+/g, '')} `;
+                              setInputText(prev => prev.startsWith(tagStr) ? prev : tagStr + prev);
+                            }
+                            inputRef.current?.focus();
+                          }}
+                          className={`absolute top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity p-2 text-slate-400 hover:text-slate-200 bg-slate-800 rounded-full shadow-lg border border-slate-700 md:flex hidden ${isMe ? '-left-10' : '-right-10'} z-10`}
+                          title="Trả lời"
+                        >
+                          <CornerUpLeft size={14} />
+                        </button>
+
                         {/* Name - Show only on the FIRST message of a group */}
                         {isFirstInGroup && (
                           <div className="flex items-center gap-2 mb-1 px-1">
@@ -300,13 +408,20 @@ const Sidebar: React.FC<SidebarProps> = ({
                         )}
                         <div
                           className={`
-                            ${msg.fileUrl && msg.isImage ? 'p-0 bg-transparent shadow-none' : `px-4 py-2 rounded-2xl text-[15px] break-words shadow-sm ${isMe ? 'bg-gradient-to-br from-blue-600 to-indigo-600 text-white' : 'bg-slate-800 text-slate-200 border border-white/5'}`}
+                            ${msg.fileUrl && msg.isImage ? 'p-0 bg-transparent shadow-none' : `px-4 py-2 rounded-2xl text-[15px] break-words shadow-sm whitespace-pre-wrap ${isMe ? 'bg-gradient-to-br from-blue-600 to-indigo-600 text-white' : 'bg-slate-800 text-slate-200 border border-white/5'}`}
                             ${isMe
                               ? (isFirstInGroup ? 'rounded-tr-2xl' : 'rounded-tr-sm') + ' rounded-br-sm'
                               : (isFirstInGroup ? 'rounded-tl-2xl' : 'rounded-tl-sm') + ' rounded-bl-sm'
                             }
                           `}
                         >
+                          {msg.replyTo && (
+                            <div className={`mb-2 pl-2 border-l-2 text-[12px] opacity-80 flex flex-col whitespace-pre-wrap break-words rounded-r-md py-1 px-2 ${isMe ? 'border-blue-300 bg-black/10' : 'border-slate-500 bg-black/20'}`}>
+                              <span className="font-bold text-[10px] uppercase tracking-wider mb-0.5 opacity-90">{msg.replyTo.userName === currentUser.name ? 'Bạn' : msg.replyTo.userName}</span>
+                              <span className="max-w-full text-left line-clamp-4 leading-relaxed">{msg.replyTo.text}</span>
+                            </div>
+                          )}
+
                           {msg.fileUrl ? (
                             <div className="flex flex-col gap-2 min-w-[150px]">
                               {msg.isImage ? (
@@ -335,15 +450,46 @@ const Sidebar: React.FC<SidebarProps> = ({
                               )}
                             </div>
                           ) : (
-                            msg.text
+                            renderTextWithMentions(msg.text || "")
                           )}
                         </div>
-                      </div>
+                      </MotionDiv>
                     </MotionDiv>
                   );
                 })
               )}
             </AnimatePresence>
+
+            {/* AI Summary Panel — hiện ngay dưới tin nhắn cuối */}
+            <AnimatePresence>
+              {showAiPanel && (
+                <MotionDiv
+                  initial={{ opacity: 0, y: 10, scale: 0.97 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  exit={{ opacity: 0, y: 10, scale: 0.97 }}
+                  className="mt-4 rounded-2xl border border-violet-500/30 bg-violet-950/60 backdrop-blur-sm overflow-hidden"
+                >
+                  <div className="flex items-center justify-between px-4 py-2.5 border-b border-violet-500/20">
+                    <div className="flex items-center gap-2 text-violet-300">
+                      <Sparkles size={14} />
+                      <span className="text-xs font-bold uppercase tracking-wider">Tóm Tắt AI</span>
+                    </div>
+                    <button onClick={() => setShowAiPanel(false)} className="text-violet-400 hover:text-white transition-colors"><X size={14} /></button>
+                  </div>
+                  <div className="p-4">
+                    {aiLoading ? (
+                      <div className="flex items-center gap-3 text-violet-300">
+                        <Loader2 size={16} className="animate-spin" />
+                        <span className="text-xs">AI đang phân tích cuộc trò chuyện...</span>
+                      </div>
+                    ) : (
+                      <p className="text-xs text-slate-200 whitespace-pre-wrap leading-relaxed">{aiSummary}</p>
+                    )}
+                  </div>
+                </MotionDiv>
+              )}
+            </AnimatePresence>
+
             <div ref={chatEndRef} />
           </div>
         )}
@@ -352,9 +498,31 @@ const Sidebar: React.FC<SidebarProps> = ({
       {
         activeTab === 'chat' && (
           <div className="fixed bottom-0 right-0 w-full md:w-96 z-[120] p-4 bg-slate-900 border-t border-white/5">
-            <form onSubmit={handleSend} className="relative group">
-              <div className="absolute inset-0 bg-blue-500/10 blur-xl opacity-0 group-focus-within:opacity-100 transition-opacity rounded-full"></div>
-              <div className="relative flex items-center gap-2 bg-slate-800 border border-slate-700 focus-within:border-blue-500/50 rounded-2xl px-1 py-1 transition-all">
+            <form onSubmit={handleSend} className="relative group flex flex-col">
+              <AnimatePresence>
+                {replyingTo && (
+                  <MotionDiv
+                    initial={{ opacity: 0, y: 10, height: 0 }}
+                    animate={{ opacity: 1, y: 0, height: 'auto' }}
+                    exit={{ opacity: 0, y: 10, height: 0 }}
+                    className="flex items-center justify-between bg-slate-800/80 px-4 py-2 rounded-t-2xl border border-b-0 border-slate-700/50 backdrop-blur-sm mx-1 mt-1 z-10"
+                  >
+                    <div className="flex items-center gap-2 overflow-hidden flex-1">
+                      <CornerUpLeft size={14} className="text-violet-400 shrink-0" />
+                      <div className="flex flex-col min-w-0">
+                        <span className="text-[10px] text-violet-300 font-bold uppercase tracking-wider">Đang trả lời {replyingTo.userName === currentUser.name ? 'Bạn' : (replyingTo.userName || 'Người lạ')}</span>
+                        <span className="text-xs text-slate-300 truncate">{replyingTo.fileUrl ? (replyingTo.fileName || 'Tệp đính kèm') : (replyingTo.text || '')}</span>
+                      </div>
+                    </div>
+                    <button type="button" onClick={() => setReplyingTo(null)} className="p-1 rounded-full text-slate-400 hover:text-white hover:bg-slate-700 transition">
+                      <X size={14} />
+                    </button>
+                  </MotionDiv>
+                )}
+              </AnimatePresence>
+
+              <div className="absolute inset-0 bg-blue-500/10 blur-xl opacity-0 group-focus-within:opacity-100 transition-opacity rounded-full z-0"></div>
+              <div className={`relative flex items-center gap-2 bg-slate-800 border border-slate-700 focus-within:border-blue-500/50 px-1 py-1 transition-all z-20 ${replyingTo ? 'rounded-b-2xl rounded-t-none' : 'rounded-2xl'}`}>
                 <input
                   type="file"
                   ref={fileInputRef}
@@ -369,11 +537,50 @@ const Sidebar: React.FC<SidebarProps> = ({
                 >
                   {isUploading ? <div className="w-5 h-5 border-2 border-blue-500 border-t-transparent animate-spin rounded-full" /> : <Paperclip size={20} />}
                 </button>
+                {/* AI Summary Button */}
+                <button
+                  type="button"
+                  onClick={handleAiSummary}
+                  disabled={aiLoading || messages.filter(m => m.text).length === 0}
+                  className="p-2 text-violet-400 hover:text-violet-200 transition-colors hover:bg-violet-500/10 rounded-xl disabled:opacity-30 disabled:cursor-not-allowed"
+                  title="Tóm tắt cuộc trò chuyện bằng AI"
+                >
+                  {aiLoading ? <Loader2 size={20} className="animate-spin" /> : <Sparkles size={20} />}
+                </button>
+                {mentionQuery.active && (
+                  <div className="absolute bottom-full left-0 mb-2 w-64 bg-slate-800 border border-slate-700/50 rounded-xl shadow-2xl overflow-hidden z-[130] p-1 animate-in fade-in slide-in-from-bottom-2">
+                    <button
+                      type="button"
+                      onClick={() => insertMention('ai')}
+                      className="w-full text-left px-3 py-2 text-sm text-violet-300 hover:bg-violet-500/20 rounded-lg flex items-center gap-2 transition-colors font-medium border border-transparent hover:border-violet-500/30"
+                    >
+                      <Sparkles size={14} /> <span>Trợ lý AI (@ai)</span>
+                    </button>
+                    {participants
+                      .filter(p => p.userName.toLowerCase().includes(mentionQuery.query.toLowerCase()) && !p.isLocal)
+                      .slice(0, 5)
+                      .map(p => (
+                        <button
+                          key={p.userId}
+                          type="button"
+                          onClick={() => insertMention(p.userName.replace(/\s+/g, ''))}
+                          className="w-full text-left px-3 py-2 flex items-center gap-2 text-sm text-slate-200 hover:bg-slate-700/50 rounded-lg transition-colors"
+                        >
+                          <div className="w-5 h-5 rounded-full bg-slate-700 flex items-center justify-center text-[8px] font-bold overflow-hidden">
+                            {p.avatar ? <img src={p.avatar} className="w-full h-full object-cover" /> : p.userName.charAt(0).toUpperCase()}
+                          </div>
+                          <span className="truncate">{p.userName}</span>
+                        </button>
+                      ))}
+                  </div>
+                )}
+
                 <input
                   type="text"
+                  ref={inputRef}
                   value={inputText}
-                  onChange={(e) => setInputText(e.target.value)}
-                  placeholder="Aa"
+                  onChange={handleInputChange}
+                  placeholder="Nhắn tin hoặc gõ @ để tag..."
                   className="flex-1 bg-transparent text-slate-200 text-[16px] md:text-[15px] pl-1 pr-2 py-2 focus:outline-none placeholder:text-slate-500"
                   autoFocus
                 />

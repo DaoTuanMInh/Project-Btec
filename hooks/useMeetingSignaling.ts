@@ -370,12 +370,14 @@ export const useMeetingSignaling = ({
                         return [...prev, {
                             id: msg.payload.id || Math.random().toString(),
                             sender: msg.from,
+                            userName: msg.payload.userName,
                             text: msg.payload.text || "",
-                            timestamp: new Date(msg.payload.timestamp),
+                            timestamp: new Date(msg.payload.timestamp || new Date()),
                             fileUrl: msg.payload.fileUrl,
                             fileName: msg.payload.fileName,
                             fileSize: msg.payload.fileSize,
-                            isImage: msg.payload.isImage
+                            isImage: msg.payload.isImage,
+                            replyTo: msg.payload.replyTo
                         }];
                     });
                     transcriptRef.current.push(`${msg.from}: ${msg.payload.fileUrl ? '[File: ' + msg.payload.fileName + ']' : msg.payload.text}`);

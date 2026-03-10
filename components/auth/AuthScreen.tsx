@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
-import { User as UserIcon, Lock, ArrowRight, Loader2, Key, Mail, Eye, EyeOff } from 'lucide-react';
+import { User as UserIcon, Lock, ArrowRight, Loader2, Key, Mail, Eye, EyeOff, ShieldCheck } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useToast } from '../ui/Toast';
-import { login, register, requestOtp, confirmOtp } from '../../services/authService';
+import { login, register, requestOtp, confirmOtp, forgotPassword, resetPassword } from '../../services/authService';
 
 interface AuthScreenProps {
     onAuthenticated: () => void;
@@ -24,6 +24,14 @@ const AuthScreen: React.FC<AuthScreenProps> = ({ onAuthenticated }) => {
     // OTP State
     const [otpSent, setOtpSent] = useState(false);
     const [otpCode, setOtpCode] = useState("");
+
+    // Forgot Password State
+    // step: 'email' | 'otp' | 'newpass'
+    const [isForgot, setIsForgot] = useState(false);
+    const [forgotStep, setForgotStep] = useState<'email' | 'otp' | 'newpass'>('email');
+    const [newPassword, setNewPassword] = useState("");
+    const [confirmNewPassword, setConfirmNewPassword] = useState("");
+    const [showNewPass, setShowNewPass] = useState(false);
 
     // Visibility States
     const [showPass, setShowPass] = useState(false);
@@ -50,6 +58,51 @@ const AuthScreen: React.FC<AuthScreenProps> = ({ onAuthenticated }) => {
         } finally {
             setIsLoading(false);
         }
+    };
+
+    // === FORGOT PASSWORD HANDLERS ===
+    const handleForgotSendOtp = async () => {
+        if (!email) return showToast("Vui lòng nhập Email", 'error');
+        setIsLoading(true);
+        try {
+            await forgotPassword(email);
+            setForgotStep('otp');
+            showToast("Mã đặt lại mật khẩu đã được gửi!", 'info');
+        } catch (error: any) {
+            showToast(error.message, 'error');
+        } finally { setIsLoading(false); }
+    };
+
+    const handleForgotVerifyOtp = async () => {
+        if (!otpCode) return showToast("Vui lòng nhập mã xác thực", 'error');
+        setIsLoading(true);
+        try {
+            // We just move to next step; OTP verified server-side on reset
+            setForgotStep('newpass');
+            showToast("Xác thực thành công! Hãy đặt mật khẩu mới.", 'success');
+        } catch (error: any) {
+            showToast(error.message, 'error');
+        } finally { setIsLoading(false); }
+    };
+
+    const handleForgotReset = async () => {
+        if (!newPassword) return showToast("Vui lòng nhập mật khẩu mới", 'error');
+        if (newPassword !== confirmNewPassword) return showToast("Mật khẩu xác nhận không khớp", 'error');
+        if (newPassword.length < 6) return showToast("Mật khẩu phải có ít nhất 6 ký tự", 'warning');
+        setIsLoading(true);
+        try {
+            await resetPassword(email, otpCode, newPassword);
+            showToast("Đặt lại mật khẩu thành công! Vui lòng đăng nhập.", 'success');
+            // Reset all state
+            setIsForgot(false);
+            setForgotStep('email');
+            setOtpCode("");
+            setNewPassword("");
+            setConfirmNewPassword("");
+            setIsLogin(true);
+        } catch (error: any) {
+            showToast(error.message, 'error');
+        } finally { setIsLoading(false); }
     };
 
     const handleSubmit = async (e: React.FormEvent) => {
@@ -116,6 +169,17 @@ const AuthScreen: React.FC<AuthScreenProps> = ({ onAuthenticated }) => {
         }
     };
 
+    // Header title helper
+    const getTitle = () => {
+        if (isForgot) {
+            if (forgotStep === 'email') return 'Quên mật khẩu';
+            if (forgotStep === 'otp') return 'Nhập mã xác thực';
+            return 'Đặt mật khẩu mới';
+        }
+        if (isLogin) return 'Đăng nhập bằng Email';
+        return otpSent ? 'Nhập mã xác thực' : 'Tạo tài khoản mới';
+    };
+
     return (
         <div className="min-h-screen bg-slate-950 flex items-center justify-center p-4">
             {/* Container */}
@@ -126,10 +190,68 @@ const AuthScreen: React.FC<AuthScreenProps> = ({ onAuthenticated }) => {
             >
                 <div className="bg-slate-800/50 p-6 text-center border-b border-slate-800">
                     <img src="/logoAVO.png" alt="Logo" className="w-24 h-24 mx-auto mb-1 object-contain rounded-full shadow-lg" onError={(e) => e.currentTarget.style.display = 'none'} />
-                    <p className="text-slate-200 font-medium">
-                        {isLogin ? "Đăng nhập bằng Email" : (otpSent ? "Nhập mã xác thực" : "Tạo tài khoản mới")}
-                    </p>
+                    <p className="text-slate-200 font-medium">{getTitle()}</p>
                 </div>
+
+                {/* ===== FORGOT PASSWORD FLOW ===== */}
+                <AnimatePresence mode="wait">
+                    {isForgot && (
+                        <MotionDiv key="forgot" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} className="p-8 space-y-4">
+
+                            {/* Step 1: Enter email */}
+                            {forgotStep === 'email' && (
+                                <div className="space-y-4">
+                                    <p className="text-sm text-slate-400">Nhập email đã đăng ký để nhận mã đặt lại mật khẩu.</p>
+                                    <div className="relative">
+                                        <Mail size={18} className="absolute left-3 top-3 text-slate-500" />
+                                        <input type="email" className="w-full bg-slate-800 border border-slate-700 text-slate-100 rounded-lg py-2.5 pl-10 pr-4 focus:ring-2 focus:ring-blue-500 outline-none" placeholder="example@gmail.com" value={email} onChange={e => setEmail(e.target.value)} />
+                                    </div>
+                                    <button onClick={handleForgotSendOtp} disabled={isLoading} className="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-3 rounded-lg flex items-center justify-center gap-2 transition-all">
+                                        {isLoading ? <Loader2 className="animate-spin" size={20} /> : <><Mail size={18} />Gửi mã xác thực</>}
+                                    </button>
+                                </div>
+                            )}
+
+                            {/* Step 2: Enter OTP */}
+                            {forgotStep === 'otp' && (
+                                <div className="space-y-4">
+                                    <p className="text-sm text-slate-400">Mã xác thực đã được gửi đến <b className="text-slate-200">{email}</b>. Có hiệu lực 5 phút.</p>
+                                    <div className="relative">
+                                        <Key size={18} className="absolute left-3 top-3 text-slate-500" />
+                                        <input type="text" inputMode="numeric" maxLength={6} className="w-full bg-slate-800 border border-slate-700 text-slate-100 rounded-lg py-2.5 pl-10 pr-4 focus:ring-2 focus:ring-blue-500 outline-none tracking-[0.5em] font-mono text-center text-lg" placeholder="000000" value={otpCode} onChange={e => setOtpCode(e.target.value.replace(/\D/g, ''))} />
+                                    </div>
+                                    <button onClick={handleForgotVerifyOtp} disabled={isLoading} className="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-3 rounded-lg flex items-center justify-center gap-2 transition-all">
+                                        {isLoading ? <Loader2 className="animate-spin" size={20} /> : <><ShieldCheck size={18} />Xác thực mã</>}
+                                    </button>
+                                    <button onClick={() => { setForgotStep('email'); setOtpCode(''); }} className="w-full text-slate-500 hover:text-slate-300 text-sm py-1 transition-colors">← Gửi lại mã</button>
+                                </div>
+                            )}
+
+                            {/* Step 3: New Password */}
+                            {forgotStep === 'newpass' && (
+                                <div className="space-y-4">
+                                    <p className="text-sm text-slate-400">Nhập mật khẩu mới cho tài khoản <b className="text-slate-200">{email}</b></p>
+                                    <div className="relative">
+                                        <Lock size={18} className="absolute left-3 top-3 text-slate-500" />
+                                        <input type={showNewPass ? 'text' : 'password'} className="w-full bg-slate-800 border border-slate-700 text-slate-100 rounded-lg py-2.5 pl-10 pr-10 focus:ring-2 focus:ring-blue-500 outline-none" placeholder="Mật khẩu mới (≥6 ký tự)" value={newPassword} onChange={e => setNewPassword(e.target.value)} />
+                                        <button type="button" onClick={() => setShowNewPass(v => !v)} className="absolute right-3 top-3 text-slate-500 hover:text-slate-300">{showNewPass ? <EyeOff size={18} /> : <Eye size={18} />}</button>
+                                    </div>
+                                    <div className="relative">
+                                        <Lock size={18} className="absolute left-3 top-3 text-slate-500" />
+                                        <input type="password" className="w-full bg-slate-800 border border-slate-700 text-slate-100 rounded-lg py-2.5 pl-10 pr-4 focus:ring-2 focus:ring-blue-500 outline-none" placeholder="Xác nhận mật khẩu mới" value={confirmNewPassword} onChange={e => setConfirmNewPassword(e.target.value)} />
+                                    </div>
+                                    <button onClick={handleForgotReset} disabled={isLoading} className="w-full bg-green-600 hover:bg-green-500 text-white font-bold py-3 rounded-lg flex items-center justify-center gap-2 transition-all">
+                                        {isLoading ? <Loader2 className="animate-spin" size={20} /> : <><ShieldCheck size={18} />Đặt lại mật khẩu</>}
+                                    </button>
+                                </div>
+                            )}
+
+                            <button onClick={() => { setIsForgot(false); setForgotStep('email'); setOtpCode(''); setEmail(''); }} className="w-full text-center text-sm text-slate-500 hover:text-slate-300 transition-colors pt-2">
+                                ← Quay lại đăng nhập
+                            </button>
+                        </MotionDiv>
+                    )}
+                </AnimatePresence>
 
                 {/* Form */}
                 <div className="p-8">
@@ -308,15 +430,21 @@ const AuthScreen: React.FC<AuthScreenProps> = ({ onAuthenticated }) => {
                     </form>
 
                     {/* Toggle Mode */}
-                    <div className="mt-6 text-center text-sm text-slate-400">
-                        {isLogin ? "Chưa có tài khoản? " : "Đã có tài khoản? "}
-                        <button
-                            onClick={() => { setIsLogin(!isLogin); setOtpSent(false); }}
-                            className="text-blue-400 hover:text-blue-300 font-medium hover:underline transition-colors"
-                        >
-                            {isLogin ? "Đăng ký ngay" : "Đăng nhập ngay"}
-                        </button>
-                    </div>
+                    {!isForgot && (
+                        <div className="mt-6 text-center text-sm text-slate-400">
+                            {isLogin ? "Chưa có tài khoản? " : "Đã có tài khoản? "}
+                            <button onClick={() => { setIsLogin(!isLogin); setOtpSent(false); }} className="text-blue-400 hover:text-blue-300 font-medium hover:underline transition-colors">
+                                {isLogin ? "Đăng ký ngay" : "Đăng nhập ngay"}
+                            </button>
+                            {isLogin && (
+                                <div className="mt-3">
+                                    <button onClick={() => { setIsForgot(true); setForgotStep('email'); setEmail(''); setOtpCode(''); }} className="text-amber-400 hover:text-amber-300 text-xs hover:underline transition-colors">
+                                        Quên mật khẩu?
+                                    </button>
+                                </div>
+                            )}
+                        </div>
+                    )}
                 </div>
             </MotionDiv>
         </div>

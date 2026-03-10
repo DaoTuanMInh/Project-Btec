@@ -18,6 +18,11 @@ export interface Message {
   fileSize?: number;
   isImage?: boolean;
   userName?: string;
+  replyTo?: {
+    id: string;
+    userName: string;
+    text: string;
+  };
 }
 
 export interface PeerStream {

@@ -3,6 +3,7 @@
   "private": true,
   "version": "1.0.0",
   "dependencies": {
+    "@google/generative-ai": "^0.24.1",
     "@vitejs/plugin-basic-ssl": "^2.1.4",
     "bcryptjs": "^3.0.3",
     "body-parser": "^2.2.2",

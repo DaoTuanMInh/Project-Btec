@@ -61,7 +61,8 @@ export const useWebRTC = ({
                             fileUrl: msg.fileUrl,
                             fileName: msg.fileName,
                             fileSize: msg.fileSize,
-                            isImage: msg.isImage
+                            isImage: msg.isImage,
+                            replyTo: msg.replyTo
                         }];
                     });
                     transcriptRef.current.push(`${remoteName}: ${msg.fileUrl ? '[File: ' + msg.fileName + ']' : msg.text}`);
