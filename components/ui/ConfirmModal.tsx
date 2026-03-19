@@ -49,8 +49,8 @@ const ConfirmModal: React.FC<ConfirmModalProps> = ({
     onConfirm,
     onCancel,
     onClose,
-    confirmText = 'Đồng ý',
-    cancelText = 'Hủy',
+    confirmText = 'Confirm',
+    cancelText = 'Cancel',
     type = 'info',
     disableBackdropClose = false,
 }) => {

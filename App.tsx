@@ -81,7 +81,7 @@ const App: React.FC = () => {
           .then(stream => {
             setLocalStream(stream);
 
-            // Khôi phục avatar từ Auth User Storage để tránh lỗi trống hình nền sau f5
+            // Restore avatar from Auth User Storage to avoid empty background after f5
             const authUserStore = getUser();
             if (authUserStore?.avatar) user.avatar = authUserStore.avatar;
 
@@ -106,7 +106,7 @@ const App: React.FC = () => {
       // Enforce Auth ID if logged in (Critical for Single Session Enforcement)
       if (authUser?.id) {
         user.id = authUser.id;
-        if (authUser.avatar) user.avatar = authUser.avatar; // Phục hồi Avatar vì session đã purge
+        if (authUser.avatar) user.avatar = authUser.avatar; // Restore Avatar because session has purged
       }
 
       let stream = existingStream;
@@ -144,7 +144,7 @@ const App: React.FC = () => {
         settings
       }));
     } catch (err: any) {
-      alert("Lỗi tham gia phòng: " + (err?.message || "Vui lòng cho phép quyền Camera/Mic để tiếp tục."));
+      alert("Failed to join room: " + (err?.message || "Please allow Camera/Mic permissions to continue."));
       console.error("Join Error:", err);
     }
   };

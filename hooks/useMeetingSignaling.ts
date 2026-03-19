@@ -65,7 +65,7 @@ export const useMeetingSignaling = ({
     // handleMediaResponse removed - moved inline to useEffect to avoid stale closures
 
     const handleOffer = async (fromId: string, payload: any) => {
-        console.log(`📥 Received offer from ${fromId} (${payload.userName}) with avatar:`, payload.avatar ? 'YES' : 'NO', payload.avatar?.substring(0, 50));
+        console.log(`Received offer from ${fromId} (${payload.userName}) with avatar:`, payload.avatar ? 'YES' : 'NO', payload.avatar?.substring(0, 50));
         const pcAnswer = createPeerConnection(fromId, payload.userName, false);
 
         if (payload.muted !== undefined || payload.videoOff !== undefined || payload.avatar !== undefined) {
@@ -119,14 +119,14 @@ export const useMeetingSignaling = ({
 
                 case 'request-join':
                     if (isCurrentUserHostRef.current) {
-                        console.log(`📥 Join request from ${msg.payload.userName}. LockRoom = ${roomSettingsRef.current.lockRoom}`);
+                        console.log(`Join request from ${msg.payload.userName}. LockRoom = ${roomSettingsRef.current.lockRoom}`);
                         // Auto-reject if room is locked
                         if (roomSettingsRef.current.lockRoom) {
                             signaling.send('reject-join', userRef.current.id, msg.from, roomId, {});
-                            console.log(`🚫 Auto-rejected ${msg.payload.userName} (${msg.from}) - Room is LOCKED`);
+                            console.log(`Auto-rejected ${msg.payload.userName} (${msg.from}) - Room is LOCKED`);
                         } else {
                             setJoinRequests((prev: any) => [...prev.filter((u: any) => u.id !== msg.from), { id: msg.from, name: msg.payload.userName, avatar: msg.payload.avatar }]);
-                            console.log(`✅ Added ${msg.payload.userName} to waiting room`);
+                            console.log(`Added ${msg.payload.userName} to waiting room`);
                         }
                     }
                     break;
@@ -141,7 +141,7 @@ export const useMeetingSignaling = ({
 
                 case 'reject-join':
                     if (!isVerified) {
-                        showToast("Yêu cầu tham gia của bạn đã bị từ chối.", 'error');
+                        showToast("Your request to join has been rejected.", 'error');
                         onLeave();
                     }
                     break;
@@ -149,13 +149,13 @@ export const useMeetingSignaling = ({
                 case 'join':
                     // Password check (only host needs to verify)
                     if (roomSettingsRef.current?.password && msg.payload.password !== roomSettingsRef.current.password) {
-                        if (isCurrentUserHostRef.current) (signaling as any).send('kick', userRef.current.id, msg.from, roomId, { reason: "Mật khẩu phòng không đúng." });
+                        if (isCurrentUserHostRef.current) (signaling as any).send('kick', userRef.current.id, msg.from, roomId, { reason: "Incorrect room password." });
                         return;
                     }
 
                     // Guests must wait to be verified before initiating WebRTC handshakes
                     if (!isVerifiedRef.current) {
-                        console.log("🔒 Guest waiting for verification. Syncing request-join with potential host.");
+                        console.log("Guest waiting for verification. Syncing request-join with potential host.");
                         signaling.send('request-join', userRef.current.id, undefined, roomId, { userName: userRef.current.name, avatar: userRef.current.avatar });
                         return;
                     }
@@ -167,7 +167,7 @@ export const useMeetingSignaling = ({
                         delete iceQueue.current[msg.from];
                     }
 
-                    console.log(`🔗 Creating offer for new joiner: ${msg.payload.userName} (${msg.from})`);
+                    console.log(`Creating offer for new joiner: ${msg.payload.userName} (${msg.from})`);
 
                     // Capture metadata (Avatar) immediately
                     setPeers((prev: any) => {
@@ -190,7 +190,7 @@ export const useMeetingSignaling = ({
                     const offer = await pcOffer.createOffer();
                     await pcOffer.setLocalDescription(offer);
 
-                    console.log(`📤 Sending offer to ${msg.from} with avatar:`, userRef.current.avatar ? 'YES' : 'NO', userRef.current.avatar?.substring(0, 50));
+                    console.log(`Sending offer to ${msg.from} with avatar:`, userRef.current.avatar ? 'YES' : 'NO', userRef.current.avatar?.substring(0, 50));
                     signaling.send('offer', userRef.current.id, msg.from, roomId, {
                         offer,
                         userName: userRef.current.name,
@@ -207,7 +207,7 @@ export const useMeetingSignaling = ({
                     setTimeout(() => {
                         signaling.send('leave', userRef.current.id, undefined, roomId, {}); // Redundancy
                         onLeave();
-                        showToast(msg.payload.reason || "Bạn đã bị mời ra khỏi phòng.", 'error');
+                        showToast(msg.payload.reason || "You have been kicked out of the room.", 'error');
                     }, 100);
                     break;
 
@@ -217,13 +217,13 @@ export const useMeetingSignaling = ({
                         if (action === 'off') {
                             if (!isMutedRef.current) toggleMute();
                         } else {
-                            setMediaRequestModal({ isOpen: true, type: 'audio', message: `Chủ phòng muốn bạn bật Micro. Bạn có đồng ý không?`, requesterId: msg.from });
+                            setMediaRequestModal({ isOpen: true, type: 'audio', message: `The host wants you to turn on the microphone. Do you agree?`, requesterId: msg.from });
                         }
                     } else if (kind === 'video') {
                         if (action === 'off') {
                             if (!isVideoOffRef.current) toggleVideo();
                         } else {
-                            setMediaRequestModal({ isOpen: true, type: 'video', message: `Chủ phòng muốn bạn bật Camera. Bạn có đồng ý không?`, requesterId: msg.from });
+                            setMediaRequestModal({ isOpen: true, type: 'video', message: `The host wants you to turn on the camera. Do you agree?`, requesterId: msg.from });
                         }
                     }
                     break;
@@ -231,9 +231,9 @@ export const useMeetingSignaling = ({
                 case 'media-response':
                     // Removed Host Check to ensure visibility for debugging
                     if (msg.payload.status === 'denied') {
-                        const requesterName = msg.payload.userName || "Thành viên";
-                        const actionText = msg.payload.kind === 'join_requirement' ? 'tham gia phòng' : msg.payload.kind === 'audio' ? 'bật Micro' : 'bật Camera';
-                        const logMsg = `❌ ${requesterName} đã từ chối yêu cầu ${actionText}.`;
+                        const requesterName = msg.payload.userName || "Member";
+                        const actionText = msg.payload.kind === 'join_requirement' ? 'join room' : msg.payload.kind === 'audio' ? 'turn on microphone' : 'turn on camera';
+                        const logMsg = `${requesterName} has rejected the request to ${actionText}.`;
 
                         console.log(`[Signaling] Media Request Denied: ${logMsg}`);
                         showToast(logMsg, 'error');
@@ -248,7 +248,7 @@ export const useMeetingSignaling = ({
 
                 case 'settings':
                     const newSettings = msg.payload;
-                    console.log('📢 Settings event received:', {
+                    console.log('Settings event received:', {
                         newSettings,
                         isVerified: isVerifiedRef.current,
                         isMuted: isMutedRef.current,
@@ -258,16 +258,16 @@ export const useMeetingSignaling = ({
                     if (isVerifiedRef.current) {
                         // Send individual requests for already-joined users
                         if (newSettings.requireMic && isMutedRef.current) {
-                            console.log('🎤 Showing mic request modal');
-                            setMediaRequestModal({ isOpen: true, type: 'audio', message: `Chủ phòng yêu cầu bật Micro. Bạn có đồng ý không?`, requesterId: msg.from });
+                            console.log('Showing mic request modal');
+                            setMediaRequestModal({ isOpen: true, type: 'audio', message: `The host wants you to turn on the microphone. Do you agree?`, requesterId: msg.from });
                         } else if (newSettings.requireCamera && isVideoOffRef.current) {
-                            console.log('📷 Showing camera request modal');
-                            setMediaRequestModal({ isOpen: true, type: 'video', message: `Chủ phòng yêu cầu bật Camera. Bạn có đồng ý không?`, requesterId: msg.from });
+                            console.log('Showing camera request modal');
+                            setMediaRequestModal({ isOpen: true, type: 'video', message: `The host wants you to turn on the camera. Do you agree?`, requesterId: msg.from });
                         } else {
-                            console.log('⏭️ No modal needed (requirements already met)');
+                            console.log('No modal needed (requirements already met)');
                         }
                     } else {
-                        console.log('⚠️ User not verified yet, skipping modal');
+                        console.log('User not verified yet, skipping modal');
                     }
                     setRoomSettings(newSettings);
                     break;
@@ -279,9 +279,9 @@ export const useMeetingSignaling = ({
                         const s = msg.payload.settings;
                         if (s && (s.requireMic || s.requireCamera)) {
                             const reqs = [];
-                            if (s.requireMic) reqs.push("Bật Micro");
-                            if (s.requireCamera) reqs.push("Bật Camera");
-                            setMediaRequestModal({ isOpen: true, type: 'join_requirement', message: `Phòng yêu cầu: ${reqs.join(" và ")}. Tham gia?`, payload: { settings: s } });
+                            if (s.requireMic) reqs.push("Turn on Microphone");
+                            if (s.requireCamera) reqs.push("Turn on Camera");
+                            setMediaRequestModal({ isOpen: true, type: 'join_requirement', message: `The room requires: ${reqs.join(" and ")}. Join?`, payload: { settings: s } });
                             setPendingOffer({ from: msg.from, payload: msg.payload });
                             return;
                         }
@@ -291,7 +291,7 @@ export const useMeetingSignaling = ({
 
                     // Always verify after successfully handling offer
                     if (!isVerifiedRef.current) {
-                        console.log('✅ User verified after handling offer');
+                        console.log('User verified after handling offer');
                         setIsVerified(true);
                     }
                     break;
@@ -333,19 +333,19 @@ export const useMeetingSignaling = ({
                     break;
 
                 case 'candidate':
-                    // console.log(`[ICE] 📥 Received candidate from ${msg.from}:`, msg.payload.candidate?.candidate);
+                    // console.log(`[ICE] Received candidate from ${msg.from}:`, msg.payload.candidate?.candidate);
                     const targetPc = pcRef.current[msg.from];
                     if (targetPc && targetPc.remoteDescription) {
                         try {
                             await targetPc.addIceCandidate(new RTCIceCandidate(msg.payload.candidate));
-                            console.log(`[ICE] ✅ Candidate added to PC for ${msg.from}`);
+                            console.log(`[ICE] Candidate added to PC for ${msg.from}`);
                         } catch (e) {
                             console.error("Direct ICE Candidate Error:", e);
                         }
                     } else {
                         if (!iceQueue.current[msg.from]) iceQueue.current[msg.from] = [];
                         iceQueue.current[msg.from].push(msg.payload.candidate);
-                        console.log(`[ICE] ⏳ Candidate queued for ${msg.from}`);
+                        console.log(`[ICE] Candidate queued for ${msg.from}`);
                     }
                     break;
 

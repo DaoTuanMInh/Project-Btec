@@ -1,0 +1,15 @@
+{
+  "ExpandedNodes": [
+    "",
+    "\\components",
+    "\\components\\auth",
+    "\\components\\profile",
+    "\\components\\room",
+    "\\components\\schedule",
+    "\\components\\setup",
+    "\\hooks",
+    "\\models",
+    "\\public"
+  ],
+  "PreviewInSolutionExplorer": false
+}

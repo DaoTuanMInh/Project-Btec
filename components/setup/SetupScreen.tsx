@@ -76,7 +76,7 @@ const SetupScreen: React.FC<Props> = ({ onJoin, setupMedia, initialName = "", us
       const { exists, requiresPassword, valid, locked, isHost } = await signaling.checkRoom(resumeRoomId, undefined, userId);
 
       if (!exists) {
-        showToast("Phòng họp đã kết thúc.", 'error');
+        showToast("Meeting has ended.", 'error');
         if (onClearResume) onClearResume();
         return;
       }
@@ -105,19 +105,19 @@ const SetupScreen: React.FC<Props> = ({ onJoin, setupMedia, initialName = "", us
   // This prevents the camera from restarting when SetupScreen remounts (e.g. keyboard open, resize).
 
   const executeJoin = async (targetRoom: string) => {
-    if (!name) return showToast("Vui lòng điền tên hiển thị của bạn.", 'warning');
+    if (!name) return showToast("Please fill in your display name.", 'warning');
     if (!targetRoom) return;
 
     try {
       const { signaling } = await import('../../services/signaling');
       // Check room with userId to detect if Host
       const { exists, requiresPassword, valid, locked, isHost, isEmpty, isScheduledWaiting, scheduledSettings } = await signaling.checkRoom(targetRoom, joinPassword, userId);
-      console.log("🔍 Room Check Result:", { exists, requiresPassword, valid, locked, isHost, isEmpty, isScheduledWaiting, inputPass: joinPassword });
+      console.log("Room Check Result:", { exists, requiresPassword, valid, locked, isHost, isEmpty, isScheduledWaiting, inputPass: joinPassword });
 
-      if (isScheduledWaiting) return showToast("Phòng họp hẹn trước này chưa được bắt đầu bởi Chủ phòng.", 'warning');
-      if (!exists) return showToast("Phòng không tồn tại hoặc đã kết thúc.", 'error');
-      if (locked) return showToast("🔒 Phòng đã bị khóa. Không thể tham gia.", 'error');
-      if (requiresPassword && !valid) return showToast("Mật khẩu phòng không đúng.", 'error');
+      if (isScheduledWaiting) return showToast("This scheduled meeting has not been started by the Host.", 'warning');
+      if (!exists) return showToast("Room does not exist or has ended.", 'error');
+      if (locked) return showToast("🔒 Room is locked. Cannot join.", 'error');
+      if (requiresPassword && !valid) return showToast("Incorrect room password.", 'error');
 
       let isRejoiningHost = isHost || false;
 
@@ -146,7 +146,7 @@ const SetupScreen: React.FC<Props> = ({ onJoin, setupMedia, initialName = "", us
 
     } catch (err) {
       console.error("Room check failed", err);
-      showToast("Không thể kết nối đến máy chủ.", 'error');
+      showToast("Cannot connect to server.", 'error');
     }
   };
 
@@ -158,7 +158,7 @@ const SetupScreen: React.FC<Props> = ({ onJoin, setupMedia, initialName = "", us
     if (isCameraOn) {
       const videoTrack = previewStream?.getVideoTracks()[0];
       if (!previewStream || !videoTrack || videoTrack.readyState === 'ended' || videoTrack.muted) {
-        showToast("Camera bị vô hiệu hóa hoặc bị chặn. Kiểm tra phím cứng!", 'error');
+        showToast("Camera is disabled or blocked. Check hardware flip!", 'error');
         return;
       }
     }
@@ -166,8 +166,8 @@ const SetupScreen: React.FC<Props> = ({ onJoin, setupMedia, initialName = "", us
     if (!name || !room) return;
 
     if (mode === 'create') {
-      if (joinSettings.requireCamera && !isCameraOn) return showToast("Cài đặt phòng yêu cầu bật Camera.", 'warning');
-      if (joinSettings.requireMic && !isMicOn) return showToast("Cài đặt phòng yêu cầu bật Mic.", 'warning');
+      if (joinSettings.requireCamera && !isCameraOn) return showToast("Room settings require Camera enabled.", 'warning');
+      if (joinSettings.requireMic && !isMicOn) return showToast("Room settings require Mic enabled.", 'warning');
 
       try {
         const savedRooms = JSON.parse(localStorage.getItem('avo_created_rooms') || '[]');
@@ -217,7 +217,7 @@ const SetupScreen: React.FC<Props> = ({ onJoin, setupMedia, initialName = "", us
         <div className="fixed top-4 right-4 flex gap-2 z-50">
           {user && (
             <>
-              <button onClick={() => setScheduleOpen(true)} className="w-10 h-10 rounded-full bg-slate-800 hover:bg-slate-700 flex items-center justify-center text-indigo-400 border border-slate-700" title="Lịch hẹn">
+              <button onClick={() => setScheduleOpen(true)} className="w-10 h-10 rounded-full bg-slate-800 hover:bg-slate-700 flex items-center justify-center text-indigo-400 border border-slate-700" title="Schedule">
                 <CalendarPlus size={18} />
               </button>
               <button onClick={() => setProfileOpen(true)} className="w-10 h-10 rounded-full bg-slate-800 overflow-hidden border border-slate-700">
@@ -266,10 +266,10 @@ const SetupScreen: React.FC<Props> = ({ onJoin, setupMedia, initialName = "", us
 
       <ConfirmModal
         isOpen={!!resumeRoomId}
-        title="Phát hiện phiên họp chưa kết thúc"
-        message={`Bạn đang ở trong phòng ${resumeRoomId}. Bạn có muốn quay lại không?`}
-        confirmText="Quay lại phòng"
-        cancelText="Không, kết thúc"
+        title="Detected active session"
+        message={`You are in room ${resumeRoomId}. Do you want to return?`}
+        confirmText="Return to Room"
+        cancelText="No, Close"
         onConfirm={handleResume}
         onCancel={handleClearResume}
         type="info"

@@ -63,14 +63,14 @@ const MeetingSettingsModal: React.FC<Props> = ({
                         className={`flex-1 py-3 text-sm font-medium border-b-2 transition-colors flex items-center justify-center gap-2 ${activeTab === 'settings' ? 'border-blue-500 text-blue-400' : 'border-transparent text-slate-400 hover:text-slate-200'}`}
                     >
                         <Shield size={16} />
-                        Cài đặt
+                        Settings
                     </button>
                     <button
                         onClick={() => setActiveTab('logs')}
                         className={`flex-1 py-3 text-sm font-medium border-b-2 transition-colors flex items-center justify-center gap-2 ${activeTab === 'logs' ? 'border-blue-500 text-blue-400' : 'border-transparent text-slate-400 hover:text-slate-200'}`}
                     >
                         <Bell size={16} />
-                        Nhật ký
+                        Logs
                         {unreadLogsCount > 0 && <span className="bg-red-500 text-white text-[10px] px-1.5 rounded-full animate-pulse">{unreadLogsCount}</span>}
                     </button>
                 </div>
@@ -80,15 +80,15 @@ const MeetingSettingsModal: React.FC<Props> = ({
                     {activeTab === 'settings' && roomSettings && (
                         <div className="space-y-6">
                             <div className="bg-blue-900/10 border border-blue-500/20 p-4 rounded-xl">
-                                <h3 className="text-blue-400 font-bold mb-1">Cài Đặt Chung</h3>
-                                <p className="text-xs text-blue-300/70">Áp dụng cho tất cả thành viên trong phòng</p>
+                                <h3 className="text-blue-400 font-bold mb-1">General Settings</h3>
+                                <p className="text-xs text-blue-300/70">Apply to all members in the room</p>
                             </div>
 
                             <div className="space-y-4">
                                 <div className="p-4 bg-slate-800/30 rounded-xl border border-slate-700/50">
                                     <div className="mb-2">
-                                        <span className="block font-medium text-slate-200">Mật khẩu phòng</span>
-                                        <span className="text-xs text-slate-500">Đặt mật khẩu để bảo vệ phòng (Để trống nếu muốn mở)</span>
+                                        <span className="block font-medium text-slate-200">Room Password</span>
+                                        <span className="text-xs text-slate-500">Set a password to protect the room (Leave empty if you want to open)</span>
                                     </div>
                                     <div className="relative">
                                         <input
@@ -96,14 +96,14 @@ const MeetingSettingsModal: React.FC<Props> = ({
                                             value={localPassword}
                                             onChange={e => setLocalPassword(e.target.value)}
                                             className="w-full bg-slate-900 border border-slate-700 rounded-lg pl-4 pr-20 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none transition-all text-white"
-                                            placeholder="Nhập mật khẩu mới..."
+                                            placeholder="Enter new password..."
                                         />
                                         <div className="absolute right-2 top-2 flex items-center gap-1">
                                             <button
                                                 type="button"
                                                 onClick={() => setShowPassword(!showPassword)}
                                                 className="p-1 text-slate-400 hover:text-white transition-colors"
-                                                title={showPassword ? "Ẩn mật khẩu" : "Hiện mật khẩu"}
+                                                title={showPassword ? "Hide password" : "Show password"}
                                             >
                                                 {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
                                             </button>
@@ -112,10 +112,10 @@ const MeetingSettingsModal: React.FC<Props> = ({
                                                 type="button"
                                                 onClick={() => {
                                                     onUpdateSettings({ ...roomSettings, password: localPassword });
-                                                    if (onShowToast) onShowToast("Đã cập nhật mật khẩu thành công!", 'success');
+                                                    if (onShowToast) onShowToast("Password updated successfully!", 'success');
                                                 }}
                                                 className="p-1 text-slate-400 hover:text-emerald-400 transition-colors"
-                                                title="Lưu mật khẩu"
+                                                title="Save password"
                                             >
                                                 <Check size={16} />
                                             </button>
@@ -125,8 +125,8 @@ const MeetingSettingsModal: React.FC<Props> = ({
 
                                 <label className={`flex items-center justify-between p-4 rounded-xl cursor-pointer transition-colors border ${roomSettings.lockRoom ? 'bg-red-500/10 border-red-500/30' : 'bg-slate-800/30 border-slate-700/50 hover:bg-slate-800/50'}`}>
                                     <div>
-                                        <span className={`block font-medium ${roomSettings.lockRoom ? 'text-red-400' : 'text-slate-200'}`}>Khóa cuộc họp</span>
-                                        <span className="text-xs text-slate-500">Ngăn không cho người mới tham gia</span>
+                                        <span className={`block font-medium ${roomSettings.lockRoom ? 'text-red-400' : 'text-slate-200'}`}>Lock Meeting</span>
+                                        <span className="text-xs text-slate-500">Prevent new people from joining</span>
                                     </div>
                                     <input
                                         type="checkbox"
@@ -137,8 +137,8 @@ const MeetingSettingsModal: React.FC<Props> = ({
                                 </label>
                                 <label className="flex items-center justify-between p-4 bg-slate-800/30 rounded-xl cursor-pointer hover:bg-slate-800/50 transition-colors border border-slate-700/50">
                                     <div>
-                                        <span className="block font-medium text-slate-200">Bắt buộc Camera</span>
-                                        <span className="text-xs text-slate-500">Thành viên phải bật Camera khi tham gia</span>
+                                        <span className="block font-medium text-slate-200">Require Camera</span>
+                                        <span className="text-xs text-slate-500">Members must turn on Camera when joining</span>
                                     </div>
                                     <input
                                         type="checkbox"
@@ -150,8 +150,8 @@ const MeetingSettingsModal: React.FC<Props> = ({
 
                                 <label className="flex items-center justify-between p-4 bg-slate-800/30 rounded-xl cursor-pointer hover:bg-slate-800/50 transition-colors border border-slate-700/50">
                                     <div>
-                                        <span className="block font-medium text-slate-200">Bắt buộc Mic</span>
-                                        <span className="text-xs text-slate-500">Thành viên phải bật Mic khi tham gia</span>
+                                        <span className="block font-medium text-slate-200">Require Mic</span>
+                                        <span className="text-xs text-slate-500">Members must turn on Mic when joining</span>
                                     </div>
                                     <input
                                         type="checkbox"
@@ -163,8 +163,8 @@ const MeetingSettingsModal: React.FC<Props> = ({
 
                                 <label className="flex items-center justify-between p-4 bg-slate-800/30 rounded-xl cursor-pointer hover:bg-slate-800/50 transition-colors border border-slate-700/50">
                                     <div>
-                                        <span className="block font-medium text-slate-200">Cho phép chia sẻ màn hình</span>
-                                        <span className="text-xs text-slate-500">Thành viên có thể share screen</span>
+                                        <span className="block font-medium text-slate-200">Allow Screen Share</span>
+                                        <span className="text-xs text-slate-500">Members can share screen</span>
                                     </div>
                                     <input
                                         type="checkbox"
@@ -176,8 +176,8 @@ const MeetingSettingsModal: React.FC<Props> = ({
 
                                 <label className="flex items-center justify-between p-4 bg-slate-800/30 rounded-xl cursor-pointer hover:bg-slate-800/50 transition-colors border border-slate-700/50">
                                     <div>
-                                        <span className="block font-medium text-slate-200">Cho phép thả cảm xúc</span>
-                                        <span className="text-xs text-slate-500">Thành viên có thể sử dụng Emote</span>
+                                        <span className="block font-medium text-slate-200">Allow Reactions</span>
+                                        <span className="text-xs text-slate-500">Members can use Emote</span>
                                     </div>
                                     <input
                                         type="checkbox"
@@ -195,7 +195,7 @@ const MeetingSettingsModal: React.FC<Props> = ({
                             {logs.length === 0 ? (
                                 <div className="text-center text-slate-500 py-10">
                                     <Bell size={32} className="mx-auto mb-2 opacity-50" />
-                                    <p>Chưa có nhật ký hoạt động nào.</p>
+                                    <p>No activity logs yet.</p>
                                 </div>
                             ) : (
                                 logs.map(log => (

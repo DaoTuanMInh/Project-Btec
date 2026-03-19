@@ -72,7 +72,7 @@ export const useSetupMedia = () => {
             if (videoTrack) {
                 videoTrack.enabled = intentCamera;
 
-                if (manual && videoTrack.muted) showToastRef.current("Camera có thể đang tắt phím cứng!", 'warning');
+                if (manual && videoTrack.muted) showToastRef.current("Camera may be turned off by a physical key!", 'warning');
 
                 videoTrack.onended = () => {
                     // Auto-restart logic disabled
@@ -95,7 +95,7 @@ export const useSetupMedia = () => {
 
         } catch (e) {
             console.warn("Could not get preview stream:", e);
-            if (manual) showToastRef.current("Không thể bật Camera. Kiểm tra quyền!", 'error');
+            if (manual) showToastRef.current("Could not turn on Camera. Check permissions!", 'error');
         } finally {
             setTimeout(() => { isStartingRef.current = false; }, 1000);
         }

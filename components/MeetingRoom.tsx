@@ -54,7 +54,7 @@ const MeetingRoom: React.FC<Props> = ({ user, roomId, localStream, onLeave, sett
   // 4. Mute/Video logic (Simple toggles)
   const toggleMute = useCallback((force = false) => {
     if (!force && state.roomSettingsRef.current?.requireMic && !isMutedRef.current) {
-      state.showToast("Bắt buộc bật Mic!", 'warning'); return;
+      state.showToast("The room settings require Mic to be turned on!", 'warning'); return;
     }
     const newVal = !isMutedRef.current;
     localStream.getAudioTracks().forEach(t => t.enabled = !newVal);
@@ -65,7 +65,7 @@ const MeetingRoom: React.FC<Props> = ({ user, roomId, localStream, onLeave, sett
 
   const toggleVideo = useCallback((force = false) => {
     if (!force && state.roomSettingsRef.current?.requireCamera && !isVideoOffRef.current) {
-      state.showToast("Bắt buộc bật Camera!", 'warning'); return;
+      state.showToast("The room settings require Camera to be turned on!", 'warning'); return;
     }
     const newVal = !isVideoOffRef.current;
     localStream.getVideoTracks().forEach(t => t.enabled = !newVal);
@@ -227,7 +227,7 @@ const MeetingRoom: React.FC<Props> = ({ user, roomId, localStream, onLeave, sett
     }
     // If user rejects audio/video request in-meeting, notify host (Broadcast to ensure delivery)
     else if (type === 'audio' || type === 'video') {
-      console.log('🚫 User denied request, sending media-response broadcast', { kind: type, status: 'denied' });
+      console.log('User denied request, sending media-response broadcast', { kind: type, status: 'denied' });
       signaling.send('media-response', user.id, undefined, roomId, {
         kind: type,
         status: 'denied',
@@ -306,7 +306,7 @@ const MeetingRoom: React.FC<Props> = ({ user, roomId, localStream, onLeave, sett
           onToggleMic={() => toggleMute()} // Allow wait room to toggle without force
           onToggleCamera={() => toggleVideo()}
         />
-        <ConfirmModal isOpen={state.mediaRequestModal.isOpen} title="Yêu cầu" message={state.mediaRequestModal.message} onConfirm={handleModalConfirm} onCancel={handleModalCancel} confirmText="Đồng ý" cancelText="Hủy" type="info" />
+        <ConfirmModal isOpen={state.mediaRequestModal.isOpen} title="Request" message={state.mediaRequestModal.message} onConfirm={handleModalConfirm} onCancel={handleModalCancel} confirmText="Confirm" cancelText="Cancel" type="info" />
       </>
     );
   }
@@ -343,10 +343,10 @@ const MeetingRoom: React.FC<Props> = ({ user, roomId, localStream, onLeave, sett
               <button
                 onClick={() => state.setIsSettingsModalOpen(true)}
                 className="p-2 md:px-3 md:py-2 bg-slate-800 rounded-full text-xs text-slate-300 flex items-center gap-2 relative group hover:bg-slate-700 transition-colors"
-                title="Cài đặt & Nhật ký"
+                title="Settings & Logs"
               >
                 <Settings size={14} className="group-hover:rotate-45 transition-transform" />
-                <span className="hidden lg:inline text-[10px] md:text-xs">Cài đặt</span>
+                <span className="hidden lg:inline text-[10px] md:text-xs">Settings</span>
                 {state.unreadLogsCount > 0 && (
                   <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[9px] md:text-[10px] font-bold w-4 h-4 md:w-5 md:h-5 rounded-full flex items-center justify-center border-2 border-slate-950 animate-pulse">
                     {state.unreadLogsCount}
@@ -359,7 +359,7 @@ const MeetingRoom: React.FC<Props> = ({ user, roomId, localStream, onLeave, sett
               className="p-2 md:px-3 md:py-2 bg-slate-800 rounded-full text-xs text-slate-300 flex items-center gap-2 relative hover:bg-slate-700 transition-colors"
             >
               <Users size={14} />
-              <span className="hidden lg:inline">Thành viên</span>
+              <span className="hidden lg:inline">Participants</span>
               {state.joinRequests.length > 0 && (
                 <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[9px] md:text-[10px] font-bold w-4 h-4 md:w-5 md:h-5 rounded-full flex items-center justify-center border-2 border-slate-950">
                   {state.joinRequests.length}
@@ -478,7 +478,7 @@ const MeetingRoom: React.FC<Props> = ({ user, roomId, localStream, onLeave, sett
             }
           } catch (e) {
             console.error("Upload error", e);
-            state.showToast("Không thể tải file lên server.", 'error');
+            state.showToast("Unable to upload file to server.", 'error');
           }
         }}
         currentUser={{ ...user, isHost: state.isCurrentUserHost }}
@@ -504,7 +504,7 @@ const MeetingRoom: React.FC<Props> = ({ user, roomId, localStream, onLeave, sett
             await signaling.updateRoomSettings(roomId, s);
             // Success: silently updated
           } catch (e) {
-            state.showToast(`Lỗi lưu cài đặt Server: ${e}`, 'error');
+            state.showToast(`Failed to save settings to Server: ${e}`, 'error');
           }
         }}
         onApprove={() => { }} onReject={() => { }}
@@ -514,7 +514,7 @@ const MeetingRoom: React.FC<Props> = ({ user, roomId, localStream, onLeave, sett
         setUnreadLogsCount={state.setUnreadLogsCount}
       />
 
-      <ConfirmModal isOpen={state.mediaRequestModal.isOpen} title="Yêu cầu" message={state.mediaRequestModal.message} onConfirm={handleModalConfirm} onCancel={handleModalCancel} confirmText="Đồng ý" cancelText="Hủy" type="info" />
+      <ConfirmModal isOpen={state.mediaRequestModal.isOpen} title="Request" message={state.mediaRequestModal.message} onConfirm={handleModalConfirm} onCancel={handleModalCancel} confirmText="Confirm" cancelText="Cancel" type="info" />
     </div>
   );
 };

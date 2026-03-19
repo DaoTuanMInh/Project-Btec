@@ -37,7 +37,7 @@ export const useWebRTC = ({
     // Helper to setup Data Channel
     const setupDataChannel = useCallback((dc: RTCDataChannel, remoteId: string, remoteName: string) => {
         dc.onopen = () => {
-            console.log(`🔒 Secure DataChannel open with ${remoteName} (${remoteId})`);
+            console.log(`Secure DataChannel open with ${remoteName} (${remoteId})`);
             dataChannelsRef.current[remoteId] = dc;
         };
         dc.onclose = () => {
@@ -127,10 +127,10 @@ export const useWebRTC = ({
 
         pc.onicecandidate = (event) => {
             if (event.candidate) {
-                console.log(`[ICE] 📤 Sending candidate to ${remoteId}:`, event.candidate.candidate);
+                console.log(`[ICE] Sending candidate to ${remoteId}:`, event.candidate.candidate);
                 signaling.send('candidate', user.id, remoteId, roomId, { candidate: event.candidate });
             } else {
-                console.log(`[ICE] 🏁 Finished gathering local candidates for ${remoteId}`);
+                console.log(`[ICE] Finished gathering local candidates for ${remoteId}`);
             }
         };
 
@@ -161,11 +161,11 @@ export const useWebRTC = ({
 
             if (pc.iceConnectionState === 'failed') {
                 console.error("ICE Connection Failed with", remoteId, " - NAT Traversal (TURN) is likely blocked or unavailable.");
-                showToast(`Kết nối video với ${remoteName} thất bại (Gặp tường lửa/NAT cứng).`, 'error');
+                showToast(`Video connection with ${remoteName} failed (Encountered firewall/hard NAT).`, 'error');
             } else if (pc.iceConnectionState === 'connected') {
-                console.log(`✅ ICE Connection Established directly with ${remoteName}`);
+                console.log(`ICE Connection Established directly with ${remoteName}`);
             } else if (pc.iceConnectionState === 'disconnected') {
-                console.warn(`⚠️ ICE Connection Disconnected with ${remoteName} - Mạng có thể đang chập chờn.`);
+                console.warn(`ICE Connection Disconnected with ${remoteName} - Network may be unstable.`);
             }
         };
 

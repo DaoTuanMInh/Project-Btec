@@ -84,7 +84,7 @@ const Sidebar: React.FC<SidebarProps> = ({
     if (inputText.trim()) {
       onSendMessage(
         inputText.trim(),
-        replyingTo ? { id: replyingTo.id, userName: replyingTo.userName || 'Unknown', text: replyingTo.fileUrl ? (replyingTo.fileName || 'Tệp đính kèm') : (replyingTo.text || '') } : undefined
+        replyingTo ? { id: replyingTo.id, userName: replyingTo.userName || 'Unknown', text: replyingTo.fileUrl ? (replyingTo.fileName || 'Attached file') : (replyingTo.text || '') } : undefined
       );
       setInputText("");
       setMentionQuery({ active: false, query: '', index: 0 });
@@ -134,7 +134,7 @@ const Sidebar: React.FC<SidebarProps> = ({
     try {
       const token = getToken();
       const payload = textMessages.map(m => ({
-        senderName: m.sender === currentUser.id ? currentUser.name : (participants.find(p => p.userId === m.sender)?.userName || 'Người dùng'),
+        senderName: m.sender === currentUser.id ? currentUser.name : (participants.find(p => p.userId === m.sender)?.userName || 'User'),
         text: m.text
       }));
       const res = await fetch('/api/ai/summarize-chat', {
@@ -146,7 +146,7 @@ const Sidebar: React.FC<SidebarProps> = ({
       if (!res.ok) throw new Error(data.error);
       setAiSummary(data.summary);
     } catch (err: any) {
-      setAiSummary(`❌ Lỗi: ${err.message}`);
+      setAiSummary(`Error: ${err.message}`);
     } finally {
       setAiLoading(false);
     }
@@ -329,7 +329,7 @@ const Sidebar: React.FC<SidebarProps> = ({
                   className="text-center text-slate-500 text-xs mt-10 italic"
                 >
                   <MessageSquare size={32} className="mx-auto mb-3 opacity-20" />
-                  Chưa có tin nhắn nào. Hãy bắt đầu cuộc trò chuyện!
+                  No messages yet. Let's start a conversation!
                 </MotionDiv>
               ) : (
                 messages.map((msg, index) => {
@@ -345,7 +345,7 @@ const Sidebar: React.FC<SidebarProps> = ({
                   const isFirstInGroup = !prevMsg || prevMsg.sender !== msg.sender ||
                     (new Date(msg.timestamp).getTime() - new Date(prevMsg.timestamp).getTime() >= 60000);
 
-                  const senderName = isMe ? "Bạn" : (participants.find(p => p.userId === msg.sender)?.userName || msg.userName || "Người lạ");
+                  const senderName = isMe ? "You" : (participants.find(p => p.userId === msg.sender)?.userName || msg.userName || "Stranger");
 
                   return (
                     <MotionDiv
@@ -392,7 +392,7 @@ const Sidebar: React.FC<SidebarProps> = ({
                             inputRef.current?.focus();
                           }}
                           className={`absolute top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity p-2 text-slate-400 hover:text-slate-200 bg-slate-800 rounded-full shadow-lg border border-slate-700 md:flex hidden ${isMe ? '-left-10' : '-right-10'} z-10`}
-                          title="Trả lời"
+                          title="Reply"
                         >
                           <CornerUpLeft size={14} />
                         </button>
@@ -417,7 +417,7 @@ const Sidebar: React.FC<SidebarProps> = ({
                         >
                           {msg.replyTo && (
                             <div className={`mb-2 pl-2 border-l-2 text-[12px] opacity-80 flex flex-col whitespace-pre-wrap break-words rounded-r-md py-1 px-2 ${isMe ? 'border-blue-300 bg-black/10' : 'border-slate-500 bg-black/20'}`}>
-                              <span className="font-bold text-[10px] uppercase tracking-wider mb-0.5 opacity-90">{msg.replyTo.userName === currentUser.name ? 'Bạn' : msg.replyTo.userName}</span>
+                               <span className="font-bold text-[10px] uppercase tracking-wider mb-0.5 opacity-90">{msg.replyTo.userName === currentUser.name ? 'You' : msg.replyTo.userName}</span>
                               <span className="max-w-full text-left line-clamp-4 leading-relaxed">{msg.replyTo.text}</span>
                             </div>
                           )}
@@ -445,7 +445,7 @@ const Sidebar: React.FC<SidebarProps> = ({
                                   download={msg.fileName}
                                   className={`flex items-center justify-center gap-2 py-1.5 rounded-lg text-[11px] font-bold transition-all ${isMe ? 'bg-white/20 hover:bg-white/30 text-white' : 'bg-blue-600 hover:bg-blue-500 text-white'}`}
                                 >
-                                  <Download size={12} /> Tải xuống
+                                  <Download size={12} /> Download
                                 </a>
                               )}
                             </div>
@@ -460,7 +460,7 @@ const Sidebar: React.FC<SidebarProps> = ({
               )}
             </AnimatePresence>
 
-            {/* AI Summary Panel — hiện ngay dưới tin nhắn cuối */}
+            {/* AI Summary Panel*/}
             <AnimatePresence>
               {showAiPanel && (
                 <MotionDiv
@@ -472,7 +472,7 @@ const Sidebar: React.FC<SidebarProps> = ({
                   <div className="flex items-center justify-between px-4 py-2.5 border-b border-violet-500/20">
                     <div className="flex items-center gap-2 text-violet-300">
                       <Sparkles size={14} />
-                      <span className="text-xs font-bold uppercase tracking-wider">Tóm Tắt AI</span>
+                      <span className="text-xs font-bold uppercase tracking-wider">AI Summary</span>
                     </div>
                     <button onClick={() => setShowAiPanel(false)} className="text-violet-400 hover:text-white transition-colors"><X size={14} /></button>
                   </div>
@@ -480,7 +480,7 @@ const Sidebar: React.FC<SidebarProps> = ({
                     {aiLoading ? (
                       <div className="flex items-center gap-3 text-violet-300">
                         <Loader2 size={16} className="animate-spin" />
-                        <span className="text-xs">AI đang phân tích cuộc trò chuyện...</span>
+                        <span className="text-xs">AI is analyzing the conversation...</span>
                       </div>
                     ) : (
                       <p className="text-xs text-slate-200 whitespace-pre-wrap leading-relaxed">{aiSummary}</p>
@@ -510,8 +510,8 @@ const Sidebar: React.FC<SidebarProps> = ({
                     <div className="flex items-center gap-2 overflow-hidden flex-1">
                       <CornerUpLeft size={14} className="text-violet-400 shrink-0" />
                       <div className="flex flex-col min-w-0">
-                        <span className="text-[10px] text-violet-300 font-bold uppercase tracking-wider">Đang trả lời {replyingTo.userName === currentUser.name ? 'Bạn' : (replyingTo.userName || 'Người lạ')}</span>
-                        <span className="text-xs text-slate-300 truncate">{replyingTo.fileUrl ? (replyingTo.fileName || 'Tệp đính kèm') : (replyingTo.text || '')}</span>
+                        <span className="text-[10px] text-violet-300 font-bold uppercase tracking-wider">Replying to {replyingTo.userName === currentUser.name ? 'You' : (replyingTo.userName || 'Stranger')}</span>
+                        <span className="text-xs text-slate-300 truncate">{replyingTo.fileUrl ? (replyingTo.fileName || 'Attached file') : (replyingTo.text || '')}</span>
                       </div>
                     </div>
                     <button type="button" onClick={() => setReplyingTo(null)} className="p-1 rounded-full text-slate-400 hover:text-white hover:bg-slate-700 transition">
@@ -543,7 +543,7 @@ const Sidebar: React.FC<SidebarProps> = ({
                   onClick={handleAiSummary}
                   disabled={aiLoading || messages.filter(m => m.text).length === 0}
                   className="p-2 text-violet-400 hover:text-violet-200 transition-colors hover:bg-violet-500/10 rounded-xl disabled:opacity-30 disabled:cursor-not-allowed"
-                  title="Tóm tắt cuộc trò chuyện bằng AI"
+                  title="Summarize chat using AI"
                 >
                   {aiLoading ? <Loader2 size={20} className="animate-spin" /> : <Sparkles size={20} />}
                 </button>
@@ -554,7 +554,7 @@ const Sidebar: React.FC<SidebarProps> = ({
                       onClick={() => insertMention('ai')}
                       className="w-full text-left px-3 py-2 text-sm text-violet-300 hover:bg-violet-500/20 rounded-lg flex items-center gap-2 transition-colors font-medium border border-transparent hover:border-violet-500/30"
                     >
-                      <Sparkles size={14} /> <span>Trợ lý AI (@ai)</span>
+                      <Sparkles size={14} /> <span>AI Assistant (@ai)</span>
                     </button>
                     {participants
                       .filter(p => p.userName.toLowerCase().includes(mentionQuery.query.toLowerCase()) && !p.isLocal)
@@ -580,7 +580,7 @@ const Sidebar: React.FC<SidebarProps> = ({
                   ref={inputRef}
                   value={inputText}
                   onChange={handleInputChange}
-                  placeholder="Nhắn tin hoặc gõ @ để tag..."
+                  placeholder="Message or type @ to mention..."
                   className="flex-1 bg-transparent text-slate-200 text-[16px] md:text-[15px] pl-1 pr-2 py-2 focus:outline-none placeholder:text-slate-500"
                   autoFocus
                 />
@@ -605,10 +605,10 @@ const Sidebar: React.FC<SidebarProps> = ({
             setKickConfirm({ isOpen: false, userId: null });
           }
         }}
-        title="Xác nhận đuổi thành viên"
-        message="Bạn có chắc chắn muốn mời thành viên này ra khỏi khoỉ phòng họp? Hành động này không thể hoàn tác ngay lập tức."
-        confirmText="Đuổi ngay"
-        cancelText="Hủy bỏ"
+        title="Confirm Kick"
+        message="Are you sure you want to kick this member out of the meeting room? This action cannot be undone immediately."
+        confirmText="Kick now"
+        cancelText="Cancel"
         type="danger"
       />
     </div >

@@ -28,8 +28,8 @@ const WaitRoom: React.FC<Props> = ({ user, localStream, onExit, isMicOn, isCamer
                 <div className="w-28 h-28 mx-auto mb-8 relative">
                     <img src="/logoAVO.png" alt="Logo" className="w-full h-full object-contain rounded-full shadow-xl animate-pulse" />
                 </div>
-                <h2 className="text-2xl font-bold text-white mb-2">Đang chờ sự chấp thuận</h2>
-                <p className="text-slate-400 mb-8">Chủ phòng đã nhận được yêu cầu. Vui lòng đợi trong giây lát...</p>
+                <h2 className="text-2xl font-bold text-white mb-2">Waiting for approval</h2>
+                <p className="text-slate-400 mb-8">The host has received the request. Please wait a moment...</p>
 
                 {/* Video Preview */}
                 <div className="relative aspect-[3/4] md:aspect-video bg-black rounded-xl overflow-hidden mb-6 border border-slate-700">
@@ -83,7 +83,7 @@ const WaitRoom: React.FC<Props> = ({ user, localStream, onExit, isMicOn, isCamer
                             }}
                             className="text-xs text-slate-500 hover:text-white underline"
                         >
-                            Gửi lại yêu cầu (Refresh)
+                            Resend request (Refresh)
                         </button>
                     </div>
                 </div>

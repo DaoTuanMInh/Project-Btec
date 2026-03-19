@@ -123,12 +123,12 @@ export const useMediaProcessing = ({
 
         // Check Settings
         if (settings?.allowScreenShare === false) {
-            showToast("Chức năng chia sẻ màn hình đang bị khóa bởi chủ phòng.", 'warning');
+            showToast("The room settings require Screen Share to be turned on!", 'warning');
             return;
         }
 
         if (!navigator.mediaDevices || !navigator.mediaDevices.getDisplayMedia) {
-            showToast("Trình duyệt không hỗ trợ chia sẻ màn hình.", 'warning');
+            showToast("Your browser does not support screen sharing.", 'warning');
             return;
         }
 
@@ -148,7 +148,7 @@ export const useMediaProcessing = ({
             if (err instanceof DOMException && err.name === 'NotAllowedError') {
                 // User cancelled
             } else {
-                showToast("Không thể chia sẻ màn hình: " + err, 'error');
+                showToast("Unable to share screen: " + err, 'error');
             }
         }
     };

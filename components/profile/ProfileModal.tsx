@@ -44,18 +44,18 @@ const ProfileModal: React.FC<ProfileModalProps> = ({ isOpen, onClose, user, onUp
             const data = await res.json();
             if (!res.ok) throw new Error(data.error);
             onUpdateUser(data.user);
-            showToast("Cập nhật thông tin thành công!", 'success');
+            showToast("Update profile successfully!", 'success');
         } catch (e: any) {
-            showToast(e.message || 'Lỗi khi lưu thông tin', 'error');
+            showToast(e.message || 'Error updating profile', 'error');
         } finally { setLoading(false); }
     };
 
     const handleChangePassword = async () => {
-        if (newPass !== confirmPass) return showToast("Mật khẩu mới không khớp", 'error');
+        if (newPass !== confirmPass) return showToast("New passwords do not match", 'error');
         setLoading(true);
         try {
             const res = await changePassword(user.id, oldPass, newPass);
-            showToast(res.message || 'Đổi mật khẩu thành công!', 'success');
+            showToast(res.message || 'Change password successfully!', 'success');
             setOldPass(''); setNewPass(''); setConfirmPass('');
         } catch (e: any) {
             showToast(e.message, 'error');
@@ -109,7 +109,7 @@ const ProfileModal: React.FC<ProfileModalProps> = ({ isOpen, onClose, user, onUp
                     {/* Header */}
                     <div className="flex justify-between items-center p-5 border-b border-slate-800 bg-slate-800/50">
                         <h2 className="text-xl font-bold text-white flex items-center gap-2">
-                            <UserIcon className="text-blue-400" size={24} /> Hồ sơ cá nhân
+                            <UserIcon className="text-blue-400" size={24} /> Personal Profile
                         </h2>
                         <button onClick={onClose} className="text-slate-400 hover:text-white transition-colors">
                             <X size={24} />
@@ -119,9 +119,9 @@ const ProfileModal: React.FC<ProfileModalProps> = ({ isOpen, onClose, user, onUp
                     <div className="flex flex-col md:flex-row md:h-[500px] max-h-[90vh] overflow-y-auto md:overflow-hidden">
                         {/* Tabs (Sidebar on Desktop, Top Bar on Mobile) */}
                         <div className="w-full md:w-1/3 border-b md:border-b-0 md:border-r border-slate-800 bg-slate-900/50 p-3 md:p-4 flex flex-row md:flex-col gap-2 overflow-x-auto no-scrollbar">
-                            <SidebarItem active={activeTab === 'info'} onClick={() => setActiveTab('info')} icon={UserIcon} label="Thông tin" isMobileHorizontal />
-                            <SidebarItem active={activeTab === 'security'} onClick={() => setActiveTab('security')} icon={Lock} label="Bảo mật" isMobileHorizontal />
-                            <SidebarItem active={activeTab === 'contact'} onClick={() => setActiveTab('contact')} icon={Mail} label="Đổi email" isMobileHorizontal />
+                            <SidebarItem active={activeTab === 'info'} onClick={() => setActiveTab('info')} icon={UserIcon} label="Information" isMobileHorizontal />
+                            <SidebarItem active={activeTab === 'security'} onClick={() => setActiveTab('security')} icon={Lock} label="Security" isMobileHorizontal />
+                            <SidebarItem active={activeTab === 'contact'} onClick={() => setActiveTab('contact')} icon={Mail} label="Change Email" isMobileHorizontal />
                         </div>
 
                         {/* Content Area */}
@@ -160,7 +160,7 @@ const ProfileModal: React.FC<ProfileModalProps> = ({ isOpen, onClose, user, onUp
                                                     const file = e.target.files?.[0];
                                                     if (!file) return;
                                                     if (file.size > 5 * 1024 * 1024) {
-                                                        showToast("Ảnh quá lớn! Vui lòng chọn ảnh dưới 5MB", 'error');
+                                                        showToast("Image is too large! Please select an image under 5MB", 'error');
                                                         return;
                                                     }
                                                     // Resize and Compress Image using Canvas before Base64
@@ -208,18 +208,18 @@ const ProfileModal: React.FC<ProfileModalProps> = ({ isOpen, onClose, user, onUp
                                                             const contentType = res.headers.get("content-type");
                                                             if (contentType && contentType.indexOf("application/json") !== -1) {
                                                                 const data = await res.json();
-                                                                if (!res.ok) throw new Error(data.error || 'Có lỗi khi cập nhật profile');
+                                                                if (!res.ok) throw new Error(data.error || 'Error updating profile');
 
                                                                 setAvatarUrl(base64Avatar);
                                                                 onUpdateUser(data.user);
-                                                                showToast('Ảnh đại diện đã được cập nhật!', 'success');
+                                                                showToast('Avatar updated successfully!', 'success');
                                                             } else {
                                                                 const textData = await res.text();
-                                                                console.error("API trả về HTML thay vì JSON:", textData);
-                                                                throw new Error("Server gửi về dữ liệu sai định dạng (có thể bạn chọn ảnh quá lớn)");
+                                                                console.error("API returned HTML instead of JSON:", textData);
+                                                                throw new Error("Server returned data in the wrong format (maybe you selected an image that is too large)");
                                                             }
                                                         } catch (err: any) {
-                                                            showToast(err.message || 'Lỗi cập nhật ảnh đại diện', 'error');
+                                                            showToast(err.message || 'Error updating avatar', 'error');
                                                         } finally {
                                                             setLoading(false);
                                                         }
@@ -231,9 +231,9 @@ const ProfileModal: React.FC<ProfileModalProps> = ({ isOpen, onClose, user, onUp
                                                 htmlFor="avatar-upload"
                                                 className="cursor-pointer bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded-xl font-medium flex items-center gap-2 transition-all"
                                             >
-                                                {loading ? 'Đang upload...' : <><Camera size={18} /> Chọn ảnh từ máy</>}
+                                                {loading ? 'Uploading...' : <><Camera size={18} /> Choose image from computer</>}
                                             </label>
-                                            <p className="text-xs text-slate-500">Chọn ảnh từ máy tính (tối đa 5MB) — upload tự động</p>
+                                            <p className="text-xs text-slate-500">Choose image from computer (max 5MB) — auto upload</p>
                                         </div>
 
 
@@ -245,18 +245,18 @@ const ProfileModal: React.FC<ProfileModalProps> = ({ isOpen, onClose, user, onUp
                             {/* --- SECURITY TAB --- */}
                             {activeTab === 'security' && (
                                 <div className="space-y-5">
-                                    <h3 className="text-lg font-semibold text-white mb-4 flex items-center gap-2"><Key size={20} /> Đổi mật khẩu</h3>
+                                    <h3 className="text-lg font-semibold text-white mb-4 flex items-center gap-2"><Key size={20} /> Change Password</h3>
 
-                                    <InputGroup label="Mật khẩu hiện tại" type="password" value={oldPass} onChange={setOldPass} />
-                                    <InputGroup label="Mật khẩu mới" type="password" value={newPass} onChange={setNewPass} />
-                                    <InputGroup label="Xác nhận mật khẩu mới" type="password" value={confirmPass} onChange={setConfirmPass} />
+                                    <InputGroup label="Current Password" type="password" value={oldPass} onChange={setOldPass} />
+                                    <InputGroup label="New Password" type="password" value={newPass} onChange={setNewPass} />
+                                    <InputGroup label="Confirm New Password" type="password" value={confirmPass} onChange={setConfirmPass} />
 
                                     <button
                                         onClick={handleChangePassword}
                                         disabled={loading || !oldPass || !newPass}
                                         className="w-full bg-red-600 hover:bg-red-500 text-white rounded-xl py-2 font-bold flex items-center justify-center gap-2 transition-all mt-4"
                                     >
-                                        {loading ? "Đang xử lý..." : "Đổi mật khẩu"}
+                                        {loading ? "Processing..." : "Change Password"}
                                     </button>
                                 </div>
                             )}
@@ -264,40 +264,40 @@ const ProfileModal: React.FC<ProfileModalProps> = ({ isOpen, onClose, user, onUp
                             {/* --- CONTACT TAB --- */}
                             {activeTab === 'contact' && (
                                 <div className="space-y-5">
-                                    <h3 className="text-lg font-semibold text-white mb-4 flex items-center gap-2"><Mail size={20} /> Đổi Email</h3>
+                                    <h3 className="text-lg font-semibold text-white mb-4 flex items-center gap-2"><Mail size={20} /> Change Email</h3>
 
                                     <div className="p-3 bg-blue-500/10 border border-blue-500/20 rounded-xl mb-4">
-                                        <p className="text-xs text-blue-300">Email hiện tại: <span className="text-white font-bold">{user.email}</span></p>
+                                        <p className="text-xs text-blue-300">Current Email: <span className="text-white font-bold">{user.email}</span></p>
                                     </div>
 
                                     {stepEmail === 'request' ? (
                                         <>
-                                            <InputGroup label="Email mới" type="email" value={newEmail} onChange={setNewEmail} placeholder="tencuaban@example.com" />
-                                            <InputGroup label="Mật khẩu xác nhận" type="password" value={emailPass} onChange={setEmailPass} />
+                                            <InputGroup label="New Email" type="email" value={newEmail} onChange={setNewEmail} placeholder="tencuaban@example.com" />
+                                            <InputGroup label="Confirm Password" type="password" value={emailPass} onChange={setEmailPass} />
 
                                             <button
                                                 onClick={handleRequestEmail}
                                                 disabled={loading || !newEmail || !emailPass}
                                                 className="w-full bg-blue-600 hover:bg-blue-500 text-white rounded-xl py-2 font-bold flex items-center justify-center gap-2 transition-all mt-2"
                                             >
-                                                {loading ? "Đang gửi..." : <><Send size={18} /> Gửi mã xác thực</>}
+                                                {loading ? "Sending..." : <><Send size={18} /> Send Verification Code</>}
                                             </button>
                                         </>
                                     ) : (
                                         <div className="space-y-4 animate-in fade-in slide-in-from-right-4">
                                             <div className="flex items-center gap-2 text-green-400 text-sm bg-green-500/10 p-3 rounded-lg border border-green-500/20">
-                                                <CheckCircle size={16} /> Đã gửi mã tới {newEmail}
+                                                <CheckCircle size={16} /> Code sent to {newEmail}
                                             </div>
-                                            <InputGroup label="Mã xác thực (OTP)" type="text" value={otpCode} onChange={setOtpCode} placeholder="123456" />
+                                            <InputGroup label="Verification Code (OTP)" type="text" value={otpCode} onChange={setOtpCode} placeholder="123456" />
 
                                             <button
                                                 onClick={handleVerifyEmail}
                                                 disabled={loading || !otpCode}
                                                 className="w-full bg-green-600 hover:bg-green-500 text-white rounded-xl py-2 font-bold flex items-center justify-center gap-2 transition-all mt-2"
                                             >
-                                                {loading ? "Đang xác thực..." : "Xác nhận đổi Email"}
+                                                {loading ? "Verifying..." : "Verify Email Change"}
                                             </button>
-                                            <button onClick={() => setStepEmail('request')} className="w-full text-slate-400 text-sm hover:text-white mt-2 underline">Quay lại</button>
+                                            <button onClick={() => setStepEmail('request')} className="w-full text-slate-400 text-sm hover:text-white mt-2 underline">Back</button>
                                         </div>
                                     )}
                                 </div>

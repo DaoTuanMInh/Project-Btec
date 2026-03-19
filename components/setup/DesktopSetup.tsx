@@ -14,9 +14,9 @@ interface DesktopSetupProps {
 }
 
 const NAV_ITEMS = [
-    { id: 'join', label: 'Tham Gia', icon: LogIn, color: 'blue', desc: 'Vào phòng họp đang có' },
-    { id: 'create', label: 'Tạo Nhanh', icon: PlusCircle, color: 'green', desc: 'Tạo phòng mới ngay lập tức' },
-    { id: 'schedule', label: 'Lên Lịch', icon: CalendarRange, color: 'indigo', desc: 'Hẹn họp theo thời gian' },
+    { id: 'join', label: 'Join', icon: LogIn, color: 'blue', desc: 'Join an existing meeting' },
+    { id: 'create', label: 'Create', icon: PlusCircle, color: 'green', desc: 'Create a new room instantly' },
+    { id: 'schedule', label: 'Schedule', icon: CalendarRange, color: 'indigo', desc: 'Schedule a meeting for later' },
 ];
 
 const colorMap: Record<string, { active: string; iconColor: string; dot: string; borderLeft: string }> = {
@@ -71,7 +71,7 @@ const DesktopSetup: React.FC<DesktopSetupProps> = ({
                     onClick={() => setCollapsed(c => !c)}
                     className="flex items-center px-3 py-4 border-b border-slate-800/60 cursor-pointer hover:bg-slate-800/40 transition-colors select-none"
                     style={{ minHeight: '60px' }}
-                    title={collapsed ? 'Mở rộng menu' : 'Thu gọn menu'}
+                    title={collapsed ? 'Expand menu' : 'Collapse menu'}
                 >
                     <img
                         src="/logoAVO.png"
@@ -89,7 +89,7 @@ const DesktopSetup: React.FC<DesktopSetupProps> = ({
 
                 {/* Nav section label */}
                 {!collapsed && (
-                    <p className="text-[9px] font-bold uppercase tracking-widest text-slate-600 px-4 mt-4 mb-1">Cuộc họp</p>
+                    <p className="text-[9px] font-bold uppercase tracking-widest text-slate-600 px-4 mt-4 mb-1">Meetings</p>
                 )}
 
                 {/* Nav items */}
@@ -142,7 +142,7 @@ const DesktopSetup: React.FC<DesktopSetupProps> = ({
                         {/* Profile */}
                         <button
                             onClick={onOpenProfile}
-                            title={collapsed ? (user.username || 'Hồ sơ') : undefined}
+                            title={collapsed ? (user.username || 'Profile') : undefined}
                             className="w-full flex items-center rounded-xl text-slate-400 hover:text-white hover:bg-slate-800/60 transition-all group overflow-hidden"
                             style={{ padding: collapsed ? '8px' : '8px 12px', justifyContent: collapsed ? 'center' : 'flex-start' }}
                         >
@@ -154,7 +154,7 @@ const DesktopSetup: React.FC<DesktopSetupProps> = ({
                             </div>
                             {!collapsed && (
                                 <div className="ml-2.5 min-w-0 overflow-hidden">
-                                    <div className="text-[13px] font-semibold text-slate-300 truncate whitespace-nowrap">{user.username || 'Người dùng'}</div>
+                                    <div className="text-[13px] font-semibold text-slate-300 truncate whitespace-nowrap">{user.username || 'User'}</div>
                                     <div className="text-[10px] text-slate-600 truncate whitespace-nowrap">{user.email || ''}</div>
                                 </div>
                             )}
@@ -164,14 +164,14 @@ const DesktopSetup: React.FC<DesktopSetupProps> = ({
                         {onLogout && (
                             <button
                                 onClick={onLogout}
-                                title={collapsed ? 'Đăng xuất' : undefined}
+                                title={collapsed ? 'Logout' : undefined}
                                 className="w-full flex items-center rounded-xl text-slate-500 hover:text-red-400 hover:bg-red-500/10 transition-all overflow-hidden"
                                 style={{ padding: collapsed ? '8px' : '8px 12px', justifyContent: collapsed ? 'center' : 'flex-start' }}
                             >
                                 <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="shrink-0">
                                     <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" /><polyline points="16 17 21 12 16 7" /><line x1="21" y1="12" x2="9" y2="12" />
                                 </svg>
-                                {!collapsed && <span className="ml-2.5 text-[13px] whitespace-nowrap">Đăng xuất</span>}
+                                {!collapsed && <span className="ml-2.5 text-[13px] whitespace-nowrap">Logout</span>}
                             </button>
                         )}
                     </div>
@@ -184,23 +184,23 @@ const DesktopSetup: React.FC<DesktopSetupProps> = ({
                 {/* Schedule button top-right */}
                 <button
                     onClick={onOpenSchedule}
-                    title="Lịch hẹn của tôi"
+                    title="My Schedule"
                     className="absolute top-4 right-5 flex items-center gap-2 px-3 py-2 rounded-xl bg-slate-800/80 hover:bg-indigo-500/20 text-slate-400 hover:text-indigo-300 border border-slate-700 hover:border-indigo-500/40 transition-all text-xs font-semibold shadow"
                 >
                     <CalendarRange size={14} />
-                    <span>Lịch hẹn của tôi</span>
+                    <span>My Schedule</span>
                 </button>
                 <div className="flex-1 max-w-md">
                     <div className="mb-5">
                         <h1 className="text-2xl font-extrabold text-white mb-1">
-                            {mode === 'join' && 'Tham gia cuộc họp'}
-                            {mode === 'create' && 'Tạo phòng mới'}
-                            {mode === 'schedule' && 'Lên lịch họp'}
+                            {mode === 'join' && 'Join meeting'}
+                            {mode === 'create' && 'Create new room'}
+                            {mode === 'schedule' && 'Schedule meeting'}
                         </h1>
                         <p className="text-slate-400 text-sm">
-                            {mode === 'join' && 'Nhập mã phòng để tham gia ngay.'}
-                            {mode === 'create' && 'Tạo phòng và mời mọi người tham gia.'}
-                            {mode === 'schedule' && 'Hẹn lịch và hệ thống sẽ gửi email tự động.'}
+                            {mode === 'join' && 'Enter room ID to join instantly.'}
+                            {mode === 'create' && 'Create a room and invite others.'}
+                            {mode === 'schedule' && 'Schedule a meeting and our system will send automated emails.'}
                         </p>
                     </div>
                     <JoinForm {...joinFormProps} hideTabs />

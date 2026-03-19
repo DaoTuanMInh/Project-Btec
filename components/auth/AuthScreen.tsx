@@ -47,12 +47,12 @@ const AuthScreen: React.FC<AuthScreenProps> = ({ onAuthenticated }) => {
     }, []);
 
     const handleSendOtp = async () => {
-        if (!email) return showToast("Vui lòng nhập Email", 'error');
+        if (!email) return showToast("Please enter your email address", 'error');
         setIsLoading(true);
         try {
             await requestOtp(email);
             setOtpSent(true);
-            showToast("Mã xác thực đã được gửi! Vui lòng kiểm tra Email.", 'info');
+            showToast("The verification code has been sent! Please check your email.", 'info');
         } catch (error: any) {
             showToast(error.message, 'error');
         } finally {
@@ -62,37 +62,37 @@ const AuthScreen: React.FC<AuthScreenProps> = ({ onAuthenticated }) => {
 
     // === FORGOT PASSWORD HANDLERS ===
     const handleForgotSendOtp = async () => {
-        if (!email) return showToast("Vui lòng nhập Email", 'error');
+        if (!email) return showToast("Please enter Email", 'error');
         setIsLoading(true);
         try {
             await forgotPassword(email);
             setForgotStep('otp');
-            showToast("Mã đặt lại mật khẩu đã được gửi!", 'info');
+            showToast("The password reset code has been sent!", 'info');
         } catch (error: any) {
             showToast(error.message, 'error');
         } finally { setIsLoading(false); }
     };
 
     const handleForgotVerifyOtp = async () => {
-        if (!otpCode) return showToast("Vui lòng nhập mã xác thực", 'error');
+        if (!otpCode) return showToast("Please enter the verification code", 'error');
         setIsLoading(true);
         try {
             // We just move to next step; OTP verified server-side on reset
             setForgotStep('newpass');
-            showToast("Xác thực thành công! Hãy đặt mật khẩu mới.", 'success');
+            showToast("Verification successful! Please enter a new password.", 'success');
         } catch (error: any) {
             showToast(error.message, 'error');
         } finally { setIsLoading(false); }
     };
 
     const handleForgotReset = async () => {
-        if (!newPassword) return showToast("Vui lòng nhập mật khẩu mới", 'error');
-        if (newPassword !== confirmNewPassword) return showToast("Mật khẩu xác nhận không khớp", 'error');
-        if (newPassword.length < 6) return showToast("Mật khẩu phải có ít nhất 6 ký tự", 'warning');
+        if (!newPassword) return showToast("Please enter a new password", 'error');
+        if (newPassword !== confirmNewPassword) return showToast("Passwords do not match", 'error');
+        if (newPassword.length < 6) return showToast("Password must be at least 6 characters long", 'warning');
         setIsLoading(true);
         try {
             await resetPassword(email, otpCode, newPassword);
-            showToast("Đặt lại mật khẩu thành công! Vui lòng đăng nhập.", 'success');
+            showToast("Password reset successful! Please login.", 'success');
             // Reset all state
             setIsForgot(false);
             setForgotStep('email');
@@ -109,10 +109,10 @@ const AuthScreen: React.FC<AuthScreenProps> = ({ onAuthenticated }) => {
         e.preventDefault();
 
         // Validation
-        if (!email || !password) return showToast("Vui lòng nhập đầy đủ thông tin", 'error');
+        if (!email || !password) return showToast("Please enter your email address and password", 'error');
         if (!isLogin) {
-            if (!username && !otpSent) return showToast("Vui lòng nhập tên hiển thị", 'error');
-            if (password !== confirmPassword && !otpSent) return showToast("Mật khẩu xác nhận không khớp", 'error');
+            if (!username && !otpSent) return showToast("Please enter your username", 'error');
+            if (password !== confirmPassword && !otpSent) return showToast("Passwords do not match", 'error');
 
             // Password Complexity Check
             const hasUpperCase = /[A-Z]/.test(password);
@@ -121,10 +121,10 @@ const AuthScreen: React.FC<AuthScreenProps> = ({ onAuthenticated }) => {
             const minLength = password.length >= 6;
 
             if (!otpSent) {
-                if (!hasUpperCase) return showToast("Mật khẩu phải có ít nhất 1 chữ hoa", 'warning');
-                if (!hasNumber) return showToast("Mật khẩu phải có ít nhất 1 chữ số", 'warning');
-                if (!hasSpecialChar) return showToast("Mật khẩu phải có ít nhất 1 ký tự đặc biệt", 'warning');
-                if (!minLength) return showToast("Mật khẩu phải có ít nhất 6 ký tự", 'warning');
+                if (!hasUpperCase) return showToast("Password must contain at least one uppercase letter", 'warning');
+                if (!hasNumber) return showToast("Password must contain at least one number", 'warning');
+                if (!hasSpecialChar) return showToast("Password must contain at least one special character", 'warning');
+                if (!minLength) return showToast("Password must be at least 6 characters long", 'warning');
             }
         }
 
@@ -138,7 +138,7 @@ const AuthScreen: React.FC<AuthScreenProps> = ({ onAuthenticated }) => {
                     localStorage.removeItem('avo_remember_email');
                 }
                 await login(email, password, rememberMe);
-                showToast("Đăng nhập thành công!", 'success');
+                showToast("Login successful!", 'success');
                 onAuthenticated();
             } else {
                 // REGISTER
@@ -147,12 +147,12 @@ const AuthScreen: React.FC<AuthScreenProps> = ({ onAuthenticated }) => {
                     await handleSendOtp();
                 } else {
                     // Step 2: Verify OTP & Register
-                    if (!otpCode) throw new Error("Vui lòng nhập mã xác thực");
+                    if (!otpCode) throw new Error("Please enter the verification code");
                     await confirmOtp(email, otpCode);
 
                     // Proceed to Register
                     await register(email, username, password);
-                    showToast("Đăng ký thành công! Vui lòng đăng nhập.", 'success');
+                    showToast("Registration successful! Please login.", 'success');
 
                     // Reset State
                     setIsLogin(true);
@@ -163,7 +163,7 @@ const AuthScreen: React.FC<AuthScreenProps> = ({ onAuthenticated }) => {
                 }
             }
         } catch (error: any) {
-            showToast(error.message || "Đã có lỗi xảy ra", 'error');
+            showToast(error.message || "An error occurred", 'error');
         } finally {
             setIsLoading(false);
         }
@@ -172,12 +172,12 @@ const AuthScreen: React.FC<AuthScreenProps> = ({ onAuthenticated }) => {
     // Header title helper
     const getTitle = () => {
         if (isForgot) {
-            if (forgotStep === 'email') return 'Quên mật khẩu';
-            if (forgotStep === 'otp') return 'Nhập mã xác thực';
-            return 'Đặt mật khẩu mới';
+            if (forgotStep === 'email') return 'Forgot Password';
+            if (forgotStep === 'otp') return 'Enter Verification Code';
+            return 'Set New Password';
         }
-        if (isLogin) return 'Đăng nhập bằng Email';
-        return otpSent ? 'Nhập mã xác thực' : 'Tạo tài khoản mới';
+        if (isLogin) return 'Login with Email';
+        return otpSent ? 'Enter Verification Code' : 'Create New Account';
     };
 
     return (
@@ -201,13 +201,13 @@ const AuthScreen: React.FC<AuthScreenProps> = ({ onAuthenticated }) => {
                             {/* Step 1: Enter email */}
                             {forgotStep === 'email' && (
                                 <div className="space-y-4">
-                                    <p className="text-sm text-slate-400">Nhập email đã đăng ký để nhận mã đặt lại mật khẩu.</p>
+                                    <p className="text-sm text-slate-400">Enter the email address associated with your account to receive a password reset code.</p>
                                     <div className="relative">
                                         <Mail size={18} className="absolute left-3 top-3 text-slate-500" />
                                         <input type="email" className="w-full bg-slate-800 border border-slate-700 text-slate-100 rounded-lg py-2.5 pl-10 pr-4 focus:ring-2 focus:ring-blue-500 outline-none" placeholder="example@gmail.com" value={email} onChange={e => setEmail(e.target.value)} />
                                     </div>
                                     <button onClick={handleForgotSendOtp} disabled={isLoading} className="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-3 rounded-lg flex items-center justify-center gap-2 transition-all">
-                                        {isLoading ? <Loader2 className="animate-spin" size={20} /> : <><Mail size={18} />Gửi mã xác thực</>}
+                                        {isLoading ? <Loader2 className="animate-spin" size={20} /> : <><Mail size={18} />Send Verification Code</>}
                                     </button>
                                 </div>
                             )}
@@ -215,39 +215,39 @@ const AuthScreen: React.FC<AuthScreenProps> = ({ onAuthenticated }) => {
                             {/* Step 2: Enter OTP */}
                             {forgotStep === 'otp' && (
                                 <div className="space-y-4">
-                                    <p className="text-sm text-slate-400">Mã xác thực đã được gửi đến <b className="text-slate-200">{email}</b>. Có hiệu lực 5 phút.</p>
+                                    <p className="text-sm text-slate-400">The verification code has been sent to <b className="text-slate-200">{email}</b>. It is valid for 5 minutes.</p>
                                     <div className="relative">
                                         <Key size={18} className="absolute left-3 top-3 text-slate-500" />
                                         <input type="text" inputMode="numeric" maxLength={6} className="w-full bg-slate-800 border border-slate-700 text-slate-100 rounded-lg py-2.5 pl-10 pr-4 focus:ring-2 focus:ring-blue-500 outline-none tracking-[0.5em] font-mono text-center text-lg" placeholder="000000" value={otpCode} onChange={e => setOtpCode(e.target.value.replace(/\D/g, ''))} />
                                     </div>
                                     <button onClick={handleForgotVerifyOtp} disabled={isLoading} className="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-3 rounded-lg flex items-center justify-center gap-2 transition-all">
-                                        {isLoading ? <Loader2 className="animate-spin" size={20} /> : <><ShieldCheck size={18} />Xác thực mã</>}
+                                        {isLoading ? <Loader2 className="animate-spin" size={20} /> : <><ShieldCheck size={18} />Verify Code</>}
                                     </button>
-                                    <button onClick={() => { setForgotStep('email'); setOtpCode(''); }} className="w-full text-slate-500 hover:text-slate-300 text-sm py-1 transition-colors">← Gửi lại mã</button>
+                                    <button onClick={() => { setForgotStep('email'); setOtpCode(''); }} className="w-full text-slate-500 hover:text-slate-300 text-sm py-1 transition-colors">← Resend Code</button>
                                 </div>
                             )}
 
                             {/* Step 3: New Password */}
                             {forgotStep === 'newpass' && (
                                 <div className="space-y-4">
-                                    <p className="text-sm text-slate-400">Nhập mật khẩu mới cho tài khoản <b className="text-slate-200">{email}</b></p>
+                                    <p className="text-sm text-slate-400">Enter a new password for the account <b className="text-slate-200">{email}</b></p>
                                     <div className="relative">
                                         <Lock size={18} className="absolute left-3 top-3 text-slate-500" />
-                                        <input type={showNewPass ? 'text' : 'password'} className="w-full bg-slate-800 border border-slate-700 text-slate-100 rounded-lg py-2.5 pl-10 pr-10 focus:ring-2 focus:ring-blue-500 outline-none" placeholder="Mật khẩu mới (≥6 ký tự)" value={newPassword} onChange={e => setNewPassword(e.target.value)} />
+                                        <input type={showNewPass ? 'text' : 'password'} className="w-full bg-slate-800 border border-slate-700 text-slate-100 rounded-lg py-2.5 pl-10 pr-10 focus:ring-2 focus:ring-blue-500 outline-none" placeholder="New Password (≥6 characters)" value={newPassword} onChange={e => setNewPassword(e.target.value)} />
                                         <button type="button" onClick={() => setShowNewPass(v => !v)} className="absolute right-3 top-3 text-slate-500 hover:text-slate-300">{showNewPass ? <EyeOff size={18} /> : <Eye size={18} />}</button>
                                     </div>
                                     <div className="relative">
                                         <Lock size={18} className="absolute left-3 top-3 text-slate-500" />
-                                        <input type="password" className="w-full bg-slate-800 border border-slate-700 text-slate-100 rounded-lg py-2.5 pl-10 pr-4 focus:ring-2 focus:ring-blue-500 outline-none" placeholder="Xác nhận mật khẩu mới" value={confirmNewPassword} onChange={e => setConfirmNewPassword(e.target.value)} />
+                                        <input type="password" className="w-full bg-slate-800 border border-slate-700 text-slate-100 rounded-lg py-2.5 pl-10 pr-4 focus:ring-2 focus:ring-blue-500 outline-none" placeholder="Confirm New Password" value={confirmNewPassword} onChange={e => setConfirmNewPassword(e.target.value)} />
                                     </div>
                                     <button onClick={handleForgotReset} disabled={isLoading} className="w-full bg-green-600 hover:bg-green-500 text-white font-bold py-3 rounded-lg flex items-center justify-center gap-2 transition-all">
-                                        {isLoading ? <Loader2 className="animate-spin" size={20} /> : <><ShieldCheck size={18} />Đặt lại mật khẩu</>}
+                                        {isLoading ? <Loader2 className="animate-spin" size={20} /> : <><ShieldCheck size={18} />Reset Password</>}
                                     </button>
                                 </div>
                             )}
 
                             <button onClick={() => { setIsForgot(false); setForgotStep('email'); setOtpCode(''); setEmail(''); }} className="w-full text-center text-sm text-slate-500 hover:text-slate-300 transition-colors pt-2">
-                                ← Quay lại đăng nhập
+                                ← Back to Login
                             </button>
                         </MotionDiv>
                     )}
@@ -283,7 +283,7 @@ const AuthScreen: React.FC<AuthScreenProps> = ({ onAuthenticated }) => {
                                     className="overflow-hidden"
                                 >
                                     <div className="space-y-2 py-1">
-                                        <label className="text-sm font-medium text-green-400">Mã xác thực (OTP)</label>
+                                        <label className="text-sm font-medium text-green-400">Verification Code (OTP)</label>
                                         <div className="relative">
                                             <input
                                                 autoFocus
@@ -295,7 +295,7 @@ const AuthScreen: React.FC<AuthScreenProps> = ({ onAuthenticated }) => {
                                                 onChange={e => setOtpCode(e.target.value.replace(/\D/g, ''))}
                                             />
                                         </div>
-                                        <p className="text-xs text-slate-500 text-center">Mã đã được gửi đến Terminal (Server Log).</p>
+                                        <p className="text-xs text-slate-500 text-center">The code has been sent to Terminal (Server Log).</p>
                                     </div>
                                 </MotionDiv>
                             )}
@@ -311,13 +311,13 @@ const AuthScreen: React.FC<AuthScreenProps> = ({ onAuthenticated }) => {
                                     className="overflow-hidden"
                                 >
                                     <div className="space-y-2 p-1">
-                                        <label className="text-sm font-medium text-slate-300">Tên hiển thị</label>
+                                        <label className="text-sm font-medium text-slate-300">Display Name</label>
                                         <div className="relative">
                                             <UserIcon size={18} className="absolute left-3 top-3 text-slate-500" />
                                             <input
                                                 type="text"
                                                 className="w-full bg-slate-800 border border-slate-700 rounded-lg py-2.5 pl-10 pr-4 text-slate-100 focus:ring-2 focus:ring-blue-500 outline-none transition-all"
-                                                placeholder="Nhập tên hiển thị"
+                                                placeholder="Enter display name"
                                                 value={username}
                                                 onChange={e => setUsername(e.target.value)}
                                             />
@@ -337,13 +337,13 @@ const AuthScreen: React.FC<AuthScreenProps> = ({ onAuthenticated }) => {
                                 >
                                     {/* Password */}
                                     <div className="space-y-2 p-1">
-                                        <label className="text-sm font-medium text-slate-300">Mật khẩu</label>
+                                        <label className="text-sm font-medium text-slate-300">Password</label>
                                         <div className="relative">
                                             <Lock size={18} className="absolute left-3 top-3 text-slate-500" />
                                             <input
                                                 type={showPass ? "text" : "password"}
                                                 className="w-full bg-slate-800 border border-slate-700 rounded-lg py-2.5 pl-10 pr-10 text-slate-100 focus:ring-2 focus:ring-blue-500 outline-none transition-all"
-                                                placeholder="Nhập mật khẩu"
+                                                placeholder="Enter password"
                                                 value={password}
                                                 onChange={e => setPassword(e.target.value)}
                                             />
@@ -360,13 +360,13 @@ const AuthScreen: React.FC<AuthScreenProps> = ({ onAuthenticated }) => {
                                     {/* Confirm Password (Register Only) */}
                                     {!isLogin && (
                                         <div className="space-y-2 p-1">
-                                            <label className="text-sm font-medium text-slate-300">Xác nhận mật khẩu</label>
+                                            <label className="text-sm font-medium text-slate-300">Confirm Password</label>
                                             <div className="relative">
                                                 <Key size={18} className="absolute left-3 top-3 text-slate-500" />
                                                 <input
                                                     type={showConfirmPass ? "text" : "password"}
                                                     className="w-full bg-slate-800 border border-slate-700 rounded-lg py-2.5 pl-10 pr-10 text-slate-100 focus:ring-2 focus:ring-blue-500 outline-none transition-all"
-                                                    placeholder="Nhập lại mật khẩu"
+                                                    placeholder="Confirm password"
                                                     value={confirmPassword}
                                                     onChange={e => setConfirmPassword(e.target.value)}
                                                 />
@@ -408,9 +408,9 @@ const AuthScreen: React.FC<AuthScreenProps> = ({ onAuthenticated }) => {
                                             )}
                                         </div>
                                     </div>
-                                    <span className="text-sm text-slate-400 group-hover:text-slate-300 transition-colors">Nhớ đăng nhập</span>
+                                    <span className="text-sm text-slate-400 group-hover:text-slate-300 transition-colors">Remember me</span>
                                 </label>
-                                <span className="text-xs text-slate-600 italic">Lưu trong {rememberMe ? '30 ngày' : 'phiên này'}</span>
+                                <span className="text-xs text-slate-600 italic">Save in {rememberMe ? '30 days' : 'this session'}</span>
                             </div>
                         )}
 
@@ -421,8 +421,8 @@ const AuthScreen: React.FC<AuthScreenProps> = ({ onAuthenticated }) => {
                             className={`w-full mt-6 ${otpSent && !isLogin ? 'bg-green-600 hover:bg-green-500' : 'bg-blue-600 hover:bg-blue-500'} text-white font-bold py-3 rounded-lg shadow-lg shadow-blue-500/20 transition-all active:scale-[0.98] flex items-center justify-center gap-2 cursor-pointer`}
                         >
                             {isLoading ? <Loader2 className="animate-spin" size={20} /> : (
-                                isLogin ? "Đăng nhập" : (
-                                    otpSent ? "Xác thực & Đăng ký" : "Gửi mã xác thực"
+                                isLogin ? "Login" : (
+                                    otpSent ? "Verify & Register" : "Send Verification Code"
                                 )
                             )}
                             {!isLoading && <ArrowRight size={18} />}
@@ -432,14 +432,14 @@ const AuthScreen: React.FC<AuthScreenProps> = ({ onAuthenticated }) => {
                     {/* Toggle Mode */}
                     {!isForgot && (
                         <div className="mt-6 text-center text-sm text-slate-400">
-                            {isLogin ? "Chưa có tài khoản? " : "Đã có tài khoản? "}
+                            {isLogin ? "Don't have an account? " : "Already have an account? "}
                             <button onClick={() => { setIsLogin(!isLogin); setOtpSent(false); }} className="text-blue-400 hover:text-blue-300 font-medium hover:underline transition-colors">
-                                {isLogin ? "Đăng ký ngay" : "Đăng nhập ngay"}
+                                {isLogin ? "Register now" : "Login now"}
                             </button>
                             {isLogin && (
                                 <div className="mt-3">
                                     <button onClick={() => { setIsForgot(true); setForgotStep('email'); setEmail(''); setOtpCode(''); }} className="text-amber-400 hover:text-amber-300 text-xs hover:underline transition-colors">
-                                        Quên mật khẩu?
+                                        Forgot password?
                                     </button>
                                 </div>
                             )}
