@@ -419,6 +419,19 @@ const JoinForm: React.FC<JoinFormProps> = ({
                                     </div>
                                 </label>
 
+                                <label className="flex items-center gap-2 p-3 bg-slate-800/50 rounded-lg border border-slate-700/50 cursor-pointer hover:bg-slate-800 transition-colors">
+                                    <input
+                                        type="checkbox"
+                                        checked={joinSettings.waitingRoom}
+                                        onChange={e => setJoinSettings({ ...joinSettings, waitingRoom: e.target.checked })}
+                                        className="w-4 h-4 rounded border-slate-600 text-blue-600 focus:ring-blue-500 bg-slate-700"
+                                    />
+                                    <div className="text-xs">
+                                        <span className="block font-medium text-slate-300">Waiting Room</span>
+                                        <span className="text-slate-500">Hold participants for approval</span>
+                                    </div>
+                                </label>
+                                
                                 <label className="col-span-2 flex items-center justify-between p-3 bg-red-500/10 rounded-lg border border-red-500/20 cursor-pointer hover:bg-red-500/20 transition-colors">
                                     <div className="text-xs">
                                         <span className="block font-medium text-red-400">Auto close room</span>

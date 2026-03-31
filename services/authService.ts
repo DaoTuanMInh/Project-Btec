@@ -63,7 +63,7 @@ export const register = async (email: string, username: string, password: string
     body: JSON.stringify({ email, username, password })
   });
   const data = await res.json();
-  if (!res.ok) throw new Error(data.error || 'Đăng ký thất bại');
+  if (!res.ok) throw new Error(data.error || 'Registration failed');
 };
 
 export const login = async (email: string, password: string, rememberMe = false): Promise<{ token: string, user: { id: string, email: string, username: string, currentRoom?: string, avatar?: string } }> => {
@@ -74,7 +74,7 @@ export const login = async (email: string, password: string, rememberMe = false)
   });
   const data = await res.json();
 
-  if (!res.ok) throw new Error(data.error || 'Đăng nhập thất bại');
+  if (!res.ok) throw new Error(data.error || 'Login failed');
 
   storeToken(data.token, rememberMe);
   storeUser({ id: data.user.id, email: data.user.email, username: data.user.username, currentRoom: data.user.currentRoom, avatar: data.user.avatar }, rememberMe);
@@ -89,7 +89,7 @@ export const requestOtp = async (email: string) => {
     body: JSON.stringify({ email })
   });
   const data = await res.json();
-  if (!res.ok) throw new Error(data.error || 'Gửi mã thất bại');
+  if (!res.ok) throw new Error(data.error || 'Failed to send code');
   return data;
 };
 
@@ -100,7 +100,7 @@ export const confirmOtp = async (email: string, code: string) => {
     body: JSON.stringify({ email, code })
   });
   const data = await res.json();
-  if (!res.ok) throw new Error(data.error || 'Xác thực mã thất bại');
+  if (!res.ok) throw new Error(data.error || 'Failed to verify code');
   return true;
 };
 
@@ -111,7 +111,7 @@ export const forgotPassword = async (email: string) => {
     body: JSON.stringify({ email })
   });
   const data = await res.json();
-  if (!res.ok) throw new Error(data.error || 'Gửi mã thất bại');
+  if (!res.ok) throw new Error(data.error || 'Failed to send code');
   return true;
 };
 
@@ -122,7 +122,7 @@ export const resetPassword = async (email: string, code: string, newPassword: st
     body: JSON.stringify({ email, code, newPassword })
   });
   const data = await res.json();
-  if (!res.ok) throw new Error(data.error || 'Đặt lại mật khẩu thất bại');
+  if (!res.ok) throw new Error(data.error || 'Failed to reset password');
   return true;
 };
 
@@ -187,6 +187,6 @@ export const verifyEmailChange = async (userId: string, newEmail: string, code: 
 export const getMeetingHistory = async (userId: string) => {
   const res = await fetch(`/api/user/meetings/${userId}`);
   const data = await res.json();
-  if (!res.ok) throw new Error(data.error || "Không thể lấy lịch sử cuộc họp");
+  if (!res.ok) throw new Error(data.error || "Failed to get meeting history");
   return data;
 };

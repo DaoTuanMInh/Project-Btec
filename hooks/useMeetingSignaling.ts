@@ -1,5 +1,5 @@
 import { useEffect, useState, useRef } from 'react';
-import { User, MeetingSettings, ReactionItem } from '../types';
+import { User, MeetingSettings, ReactionItem, PeerStream, Message } from '../types';
 import { signaling } from '../services/signaling';
 import { useToast } from '../components/ui/Toast';
 
@@ -10,19 +10,20 @@ interface UseMeetingSignalingProps {
     isCurrentUserHost: boolean;
 
     // State Setters
-    setPeers: any;
-    setJoinRequests: any;
-    setMessages: any;
+    setPeers: React.Dispatch<React.SetStateAction<PeerStream[]>>;
+    setJoinRequests: React.Dispatch<React.SetStateAction<User[]>>;
+    setMessages: React.Dispatch<React.SetStateAction<Message[]>>;
     setReactions: React.Dispatch<React.SetStateAction<ReactionItem[]>>;
-    setRoomSettings: any;
-    setMediaRequestModal: any;
-    setLogs: any;
-    setUnreadCount: any;
-    setUnreadLogsCount: any;
 
-    // Refs
+    setRoomSettings: React.Dispatch<React.SetStateAction<MeetingSettings>>;
+    setMediaRequestModal: React.Dispatch<React.SetStateAction<any>>;
+    setLogs: React.Dispatch<React.SetStateAction<any>>;
+    setUnreadCount: React.Dispatch<React.SetStateAction<number>>;
+    setUnreadLogsCount: React.Dispatch<React.SetStateAction<number>>;
+
+    // State & Refs
     isVerified: boolean;
-    setIsVerified: any;
+    setIsVerified: (v: boolean) => void;
     isVerifiedRef: React.MutableRefObject<boolean>;
     isMutedRef: React.MutableRefObject<boolean>;
     isVideoOffRef: React.MutableRefObject<boolean>;
@@ -33,13 +34,13 @@ interface UseMeetingSignalingProps {
     isSettingsModalOpenRef: React.MutableRefObject<boolean>;
     processedMsgIdsRef: React.MutableRefObject<Set<string>>;
 
-    // WebRTC Functions
-    createPeerConnection: any;
-    processIceQueue: any;
-    pcRef: any;
-    iceQueue: any;
+    // WebRTC
+    createPeerConnection: (id: string, name: string, isOfferer: boolean) => RTCPeerConnection;
+    processIceQueue: (id: string) => Promise<void>;
+    pcRef: React.MutableRefObject<Record<string, RTCPeerConnection>>;
+    iceQueue: React.MutableRefObject<Record<string, RTCIceCandidateInit[]>>;
 
-    // Functions
+    // Actions
     onLeave: () => void;
     toggleMute: () => void;
     toggleVideo: () => void;
@@ -119,12 +120,19 @@ export const useMeetingSignaling = ({
 
                 case 'request-join':
                     if (isCurrentUserHostRef.current) {
-                        console.log(`Join request from ${msg.payload.userName}. LockRoom = ${roomSettingsRef.current.lockRoom}`);
-                        // Auto-reject if room is locked
+                        console.log(`Join request from ${msg.payload.userName}. LockRoom = ${roomSettingsRef.current.lockRoom}, WaitingRoom = ${roomSettingsRef.current.waitingRoom}`);
+                        // 1. Auto-reject if room is locked
                         if (roomSettingsRef.current.lockRoom) {
                             signaling.send('reject-join', userRef.current.id, msg.from, roomId, {});
                             console.log(`Auto-rejected ${msg.payload.userName} (${msg.from}) - Room is LOCKED`);
-                        } else {
+                        } 
+                        // 2. Auto-approve if waiting room is DISABLED
+                        else if (!roomSettingsRef.current.waitingRoom) {
+                            signaling.send('approve-join', userRef.current.id, msg.from, roomId, {});
+                            console.log(`Auto-approved ${msg.payload.userName} (${msg.from}) - Waiting Room is DISABLED`);
+                        }
+                        // 3. Put in waiting room
+                        else {
                             setJoinRequests((prev: any) => [...prev.filter((u: any) => u.id !== msg.from), { id: msg.from, name: msg.payload.userName, avatar: msg.payload.avatar }]);
                             console.log(`Added ${msg.payload.userName} to waiting room`);
                         }
@@ -389,6 +397,8 @@ export const useMeetingSignaling = ({
                     setReactions(prev => [...prev, newR]);
                     setTimeout(() => setReactions(prev => prev.filter(r => r.id !== newR.id)), 6000);
                     break;
+
+
             }
         };
 

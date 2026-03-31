@@ -57,7 +57,7 @@ const PORT = process.env.PORT || 3000;
 
 // 1. Middlewares
 app.use(cors());
-app.use(express.json({ limit: '10mb' })); // Tăng limit để hỗ trợ upload avatar base64
+app.use(express.json({ limit: '10mb' })); // Increase limit to support base64 avatar upload
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
 // 2. Static Files
@@ -87,8 +87,8 @@ const upload = multer({ storage, limits: { fileSize: 50 * 1024 * 1024 } });
 
 // 5. MongoDB Connection
 mongoose.connect(process.env.MONGO_URI)
-    .then(() => console.log('✅ MongoDB Connected'))
-    .catch(err => console.error('❌ MongoDB Connection Error:', err));
+    .then(() => console.log('MongoDB Connected'))
+    .catch(err => console.error('MongoDB Connection Error:', err));
 
 // 6. OTP & Email Setup
 const otpStore = new Map();
@@ -103,13 +103,13 @@ const transporter = nodemailer.createTransport({
 const verifyToken = (req, res, next) => {
     const authHeader = req.headers['authorization'];
     const token = authHeader && authHeader.split(' ')[1];
-    if (!token) return res.status(401).json({ error: 'Không có token xác thực' });
+    if (!token) return res.status(401).json({ error: 'No authentication token' });
     try {
         const decoded = jwt.verify(token, JWT_SECRET);
         req.userId = decoded.userId;
         next();
     } catch (e) {
-        return res.status(401).json({ error: 'Token không hợp lệ hoặc đã hết hạn' });
+        return res.status(401).json({ error: 'Invalid or expired token' });
     }
 };
 
@@ -121,13 +121,13 @@ app.post('/api/send-otp', async (req, res) => {
     // Cấp OTP chỉ cho những email chưa được đăng ký
     const userExists = await User.findOne({ email });
     if (userExists) {
-        return res.status(400).json({ error: "Email này đã được đăng ký" });
+        return res.status(400).json({ error: "Email is already registered" });
     }
 
     const now = Date.now();
     const existing = otpStore.get(email);
     if (existing && (now - existing.lastSentAt < 60000)) {
-        return res.status(429).json({ error: "Vui lòng đợi 60s trước khi lấy mã mới" });
+        return res.status(429).json({ error: "Please wait 60s before getting a new code" });
     }
 
     const code = Math.floor(100000 + Math.random() * 900000).toString();
@@ -137,20 +137,20 @@ app.post('/api/send-otp', async (req, res) => {
         await transporter.sendMail({
             from: `"AVO Meeting" <${process.env.EMAIL_USER}>`,
             to: email,
-            subject: 'Mã xác thực AVO Meeting',
-            html: `<h3>Mã xác thực của bạn là: <b style="letter-spacing:5px">${code}</b></h3><p>Hiệu lực 5 phút.</p>`
+            subject: 'AVO Meeting Verification Code',
+            html: `<h3>Your verification code is: <b style="letter-spacing:5px">${code}</b></h3><p>Valid for 5 minutes.</p>`
         });
         res.json({ success: true });
     } catch (error) {
-        res.status(500).json({ error: "Gửi mail thất bại" });
+        res.status(500).json({ error: "Failed to send email" });
     }
 });
 
 app.post('/api/verify-otp', (req, res) => {
     const { email, code } = req.body;
     const record = otpStore.get(email);
-    if (!record) return res.status(400).json({ error: "Mã đã hết hạn hoặc không tồn tại" });
-    if (record.code !== code) return res.status(400).json({ error: "Mã xác thực không đúng" });
+    if (!record) return res.status(400).json({ error: "Code has expired or does not exist" });
+    if (record.code !== code) return res.status(400).json({ error: "Incorrect verification code" });
     otpStore.delete(email);
     res.json({ success: true });
 });
@@ -161,12 +161,12 @@ app.post('/api/forgot-password', async (req, res) => {
     if (!email) return res.status(400).json({ error: "Email is required" });
 
     const user = await User.findOne({ email });
-    if (!user) return res.status(404).json({ error: "Email này chưa được đăng ký" });
+    if (!user) return res.status(404).json({ error: "Email is not registered" });
 
     const now = Date.now();
     const existing = otpStore.get(`reset_${email}`);
     if (existing && (now - existing.lastSentAt < 60000)) {
-        return res.status(429).json({ error: "Vui lòng đợi 60s trước khi gửi lại mã" });
+        return res.status(429).json({ error: "Please wait 60s before sending the code again" });
     }
 
     const code = Math.floor(100000 + Math.random() * 900000).toString();
@@ -176,40 +176,40 @@ app.post('/api/forgot-password', async (req, res) => {
         await transporter.sendMail({
             from: `"AVO Meeting" <${process.env.EMAIL_USER}>`,
             to: email,
-            subject: '🔑 Đặt lại mật khẩu AVO Meeting',
+            subject: ' Reset Password AVO Meeting',
             html: `
                 <div style="font-family:Arial,sans-serif;max-width:480px;margin:auto;padding:32px;background:#0f172a;color:#e2e8f0;border-radius:16px">
-                    <h2 style="color:#60a5fa;margin-bottom:8px">🔑 Quên mật khẩu?</h2>
-                    <p style="color:#94a3b8">Chúng tôi nhận được yêu cầu đặt lại mật khẩu cho tài khoản <b style="color:#e2e8f0">${email}</b>.</p>
+                    <h2 style="color:#60a5fa;margin-bottom:8px">Forgot password?</h2>
+                    <p style="color:#94a3b8">We received a request to reset the password for the account <b style="color:#e2e8f0">${email}</b>.</p>
                     <div style="background:#1e293b;border:1px solid #334155;border-radius:12px;padding:24px;text-align:center;margin:24px 0">
-                        <p style="color:#94a3b8;margin:0 0 8px">Mã xác thực của bạn là:</p>
+                        <p style="color:#94a3b8;margin:0 0 8px">Your verification code is:</p>
                         <p style="font-size:36px;font-weight:bold;letter-spacing:12px;color:#60a5fa;margin:0">${code}</p>
-                        <p style="color:#64748b;font-size:12px;margin:12px 0 0">Có hiệu lực trong <b>5 phút</b></p>
+                        <p style="color:#64748b;font-size:12px;margin:12px 0 0">Valid for <b>5 minutes</b></p>
                     </div>
-                    <p style="color:#64748b;font-size:13px">Nếu bạn không yêu cầu điều này, hãy bỏ qua email này.</p>
+                    <p style="color:#64748b;font-size:13px">If you did not request this, please ignore this email.</p>
                 </div>
             `
         });
         res.json({ success: true });
     } catch (error) {
-        res.status(500).json({ error: "Gửi mail thất bại" });
+        res.status(500).json({ error: "Failed to send email" });
     }
 });
 
 // Reset Password: Xác thực OTP và cập nhật mật khẩu mới
 app.post('/api/reset-password', async (req, res) => {
     const { email, code, newPassword } = req.body;
-    if (!email || !code || !newPassword) return res.status(400).json({ error: "Thiếu thông tin" });
+    if (!email || !code || !newPassword) return res.status(400).json({ error: "Missing information" });
 
     const record = otpStore.get(`reset_${email}`);
-    if (!record) return res.status(400).json({ error: "Mã đã hết hạn hoặc không tồn tại" });
+    if (!record) return res.status(400).json({ error: "Code has expired or does not exist" });
     if (Date.now() > record.expiresAt) {
         otpStore.delete(`reset_${email}`);
-        return res.status(400).json({ error: "Mã xác thực đã hết hạn" });
+        return res.status(400).json({ error: "Verification code has expired" });
     }
-    if (record.code !== code) return res.status(400).json({ error: "Mã xác thực không đúng" });
+    if (record.code !== code) return res.status(400).json({ error: "Incorrect verification code" });
 
-    if (newPassword.length < 6) return res.status(400).json({ error: "Mật khẩu phải có ít nhất 6 ký tự" });
+    if (newPassword.length < 6) return res.status(400).json({ error: "Password must be at least 6 characters long" });
 
     try {
         const salt = await bcrypt.genSalt(10);
@@ -218,24 +218,24 @@ app.post('/api/reset-password', async (req, res) => {
         otpStore.delete(`reset_${email}`);
         res.json({ success: true });
     } catch (err) {
-        res.status(500).json({ error: "Cập nhật mật khẩu thất bại" });
+        res.status(500).json({ error: "Failed to update password" });
     }
 });
 
 
 // ===== AI API =====
 app.post('/api/ai/summarize-chat', verifyToken, async (req, res) => {
-    if (!process.env.GROQ_API_KEY) return res.status(503).json({ error: 'AI chưa được cấu hình (thiếu GROQ_API_KEY)' });
+    if (!process.env.GROQ_API_KEY) return res.status(503).json({ error: 'AI is not configured (missing GROQ_API_KEY)' });
     const { messages } = req.body; // [{sender, text, timestamp}]
-    if (!messages || messages.length === 0) return res.status(400).json({ error: 'Không có nội dung chat để tóm tắt' });
+    if (!messages || messages.length === 0) return res.status(400).json({ error: 'No chat content to summarize' });
 
     const chatText = messages.map(m => `${m.senderName}: ${m.text}`).join('\n');
-    const prompt = `Bạn là trợ lý AI thông minh. Hãy đọc nội dung cuộc trò chuyện sau trong một cuộc họp trực tuyến và tóm tắt bằng tiếng Việt. Hãy:
-1. Liệt kê các điểm chính đã thảo luận
-2. Nếu có kết luận hay quyết định nào, hãy ghi rõ
-3. Trình bày gọn gàng, dễ đọc
+    const prompt = `You are a smart AI assistant. Please read the following conversation from an online meeting and summarize it in Vietnamese. Please:
+1. List the main points discussed
+2. If there are any conclusions or decisions, please state them clearly
+3. Present them neatly and easy to read
 
-Nội dung cuộc trò chuyện:
+Conversation content:
 ${chatText}`;
 
     try {
@@ -257,12 +257,12 @@ ${chatText}`;
             }
         );
         const data = await groqRes.json();
-        if (!groqRes.ok) throw new Error(data?.error?.message || 'Groq API lỗi');
-        const summary = data?.choices?.[0]?.message?.content || 'Không có kết quả';
+        if (!groqRes.ok) throw new Error(data?.error?.message || 'Groq API error');
+        const summary = data?.choices?.[0]?.message?.content || 'No result';
         res.json({ summary });
     } catch (err) {
         console.error('Groq API Error:', err.message);
-        res.status(500).json({ error: `AI lỗi: ${err.message}` });
+        res.status(500).json({ error: `AI error: ${err.message}` });
     }
 });
 
@@ -270,10 +270,10 @@ ${chatText}`;
 app.post('/api/auth/register', async (req, res) => {
     try {
         const { username, email, password } = req.body;
-        if (password.length < 6) return res.status(400).json({ error: 'Mật khẩu tối thiểu 6 ký tự' });
+        if (password.length < 6) return res.status(400).json({ error: 'Password must be at least 6 characters long' });
 
         const exists = await User.findOne({ email });
-        if (exists) return res.status(400).json({ error: 'Email này đã được đăng ký' });
+        if (exists) return res.status(400).json({ error: 'Email is already registered' });
 
         const salt = await bcrypt.genSalt(10);
         const hashedPassword = await bcrypt.hash(password, salt);
@@ -288,7 +288,7 @@ app.post('/api/auth/login', async (req, res) => {
         const { email, password } = req.body;
         const user = await User.findOne({ email });
         if (!user || !(await bcrypt.compare(password, user.password))) {
-            return res.status(400).json({ error: 'Thông tin đăng nhập không chính xác' });
+            return res.status(400).json({ error: 'Invalid login information' });
         }
         res.json({
             success: true,
@@ -302,14 +302,14 @@ app.post('/api/auth/login', async (req, res) => {
 app.post('/api/token', verifyToken, async (req, res) => {
     try {
         const { roomId, userId, role } = req.body;
-        if (!roomId || !userId) return res.status(400).json({ error: 'Thiếu roomId hoặc userId' });
-        if (req.userId !== userId) return res.status(403).json({ error: 'userId không khớp với token' });
+        if (!roomId || !userId) return res.status(400).json({ error: 'Missing roomId or userId' });
+        if (req.userId !== userId) return res.status(403).json({ error: 'userId does not match token' });
         const roomToken = jwt.sign(
             { userId, roomId, role: role || 'guest' },
             JWT_SECRET,
             { expiresIn: '15m' }
         );
-        console.log(`🔑 Room token issued: user=${userId} → room=${roomId} role=${role}`);
+        console.log(`Room token issued: user=${userId} → room=${roomId} role=${role}`);
         res.json({ token: roomToken });
     } catch (e) {
         res.status(500).json({ error: e.message });
@@ -331,11 +331,11 @@ app.post('/api/user/change-password', async (req, res) => {
         const { userId, oldPassword, newPassword } = req.body;
         const user = await User.findById(userId);
         if (!user || !(await bcrypt.compare(oldPassword, user.password))) {
-            return res.status(400).json({ error: "Mật khẩu cũ không đúng" });
+            return res.status(400).json({ error: "Old password is incorrect" });
         }
         user.password = await bcrypt.hash(newPassword, await bcrypt.genSalt(10));
         await user.save();
-        res.json({ success: true, message: 'Đổi mật khẩu thành công!' });
+        res.json({ success: true, message: 'Password changed successfully!' });
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
@@ -437,7 +437,7 @@ const userSocketMap = {};
 const handleSessionKick = (userId, newSocketId) => {
     const oldSocketId = userSocketMap[userId];
     if (oldSocketId && oldSocketId !== newSocketId) {
-        io.to(oldSocketId).emit('force-logout', { reason: 'Tài khoản đã đăng nhập ở nơi khác.' });
+        io.to(oldSocketId).emit('force-logout', { reason: 'Account has been logged in elsewhere.' });
         const oldSocket = io.sockets.sockets.get(oldSocketId);
         if (oldSocket) setTimeout(() => oldSocket.disconnect(true), 500);
     }
@@ -475,6 +475,28 @@ io.on('connection', (socket) => {
     });
 
     socket.on('join-room', async (roomId, userId, userName, isHost, settings, token, avatar, callback) => {
+        // --- SECURE ZERO TRUST VERIFICATION ---
+        try {
+            if (!token) throw new Error('Missing room access token');
+            
+            // Verify and decode the room-specific token
+            const decoded = jwt.verify(token, JWT_SECRET);
+            
+            // Check cross-reference: token must match the room and user
+            if (decoded.roomId !== roomId || decoded.userId !== userId) {
+                console.warn(`Access Denied: Token mismatch. user=${userId}, room=${roomId}`);
+                if (typeof callback === 'function') callback({ error: 'Truy cập bị từ chối: Token không hợp lệ cho phòng này.' });
+                return;
+            }
+            
+            console.log(`Zero Trust Verified: ${userName} (${userId}) joined room ${roomId}`);
+        } catch (err) {
+            console.error('Zero Trust Auth Error:', err.message);
+            if (typeof callback === 'function') callback({ error: `Xác thực thất bại: ${err.message}` });
+            return;
+        }
+        // ---------------------------------------
+
         handleSessionKick(userId, socket.id);
         socket.join(roomId);
         socketMap[socket.id] = { roomId, userId, userName, avatar };
@@ -500,6 +522,33 @@ io.on('connection', (socket) => {
         if (typeof callback === 'function') callback({ success: true });
     });
 
+    socket.on('update-room-settings', async (roomId, settings, token, callback) => {
+        try {
+            // Verify host token before saving settings
+            const decoded = jwt.verify(token, JWT_SECRET);
+            if (decoded.roomId !== roomId || decoded.role !== 'host') {
+                return callback({ error: 'Truy cập bị từ chối: Chỉ chủ phòng mới có thể thay đổi cài đặt.' });
+            }
+
+            // Update room settings in DB
+            await Room.updateOne({ roomId, isActive: true }, { 
+                $set: { 
+                    settings, 
+                    password: settings?.password || '' 
+                } 
+            });
+
+            // Broadcast to everyone else in the room
+            socket.to(roomId).emit('signal', { type: 'room-settings-updated', roomId, settings });
+            
+            console.log(`Settings updated for room ${roomId} by host.`);
+            if (typeof callback === 'function') callback({ success: true });
+        } catch (e) {
+            console.error('Update Settings Error:', e.message);
+            if (typeof callback === 'function') callback({ error: `Lỗi cập nhật: ${e.message}` });
+        }
+    });
+
     socket.on('signal', async (data) => {
         const { roomId, type, payload, from, to } = data;
         if (type === 'chat') {
@@ -508,7 +557,7 @@ io.on('connection', (socket) => {
                 const chatTextRaw = payload.text || '';
                 await new Message({
                     roomId, senderId: from, text: encryptText(chatTextRaw),
-                    userName: payload.userName || userInfo.userName || "Người dùng",
+                    userName: payload.userName || userInfo.userName || "User",
                     type: payload.fileUrl ? (payload.isImage ? 'image' : 'file') : 'text',
                     fileUrl: payload.fileUrl, fileName: payload.fileName, fileSize: payload.fileSize,
                     replyTo: payload.replyTo ? { id: payload.replyTo.id, userName: payload.replyTo.userName, text: encryptText(payload.replyTo.text) } : undefined
@@ -527,7 +576,7 @@ io.on('connection', (socket) => {
                                     body: JSON.stringify({
                                         model: "llama-3.3-70b-versatile",
                                         messages: [
-                                            { role: "system", content: "Bạn là trợ lý ảo thân thiện của ứng dụng AVO Meeting định dạng câu trả lời bằng markdown hoặc văn bản thuần. Hãy trả lời ngắn gọn, thông minh và dí dỏm bằng tiếng Việt." },
+                                            { role: "system", content: "You are a friendly virtual assistant for the AVO Meeting application. Format your answers in markdown or plain text. Answer briefly, intelligently, and wittily in Vietnamese." },
                                             { role: "user", content: aiQuery }
                                         ],
                                         temperature: 0.6,
@@ -540,14 +589,14 @@ io.on('connection', (socket) => {
                                 const aiResText = data.choices[0].message.content;
                                 const aiMsg = {
                                     roomId, type: 'chat',
-                                    payload: { text: aiResText, userName: '✨ Trợ lý AVO' },
+                                    payload: { text: aiResText, userName: 'AVO Assistant' },
                                     from: 'ai-assistant', to: null
                                 };
                                 io.to(roomId).emit('signal', aiMsg); // Phát cho TẤT CẢ mọi người trong phòng (gồm cả người gửi)
 
                                 await new Message({
                                     roomId, senderId: 'ai-assistant', text: encryptText(aiResText),
-                                    userName: '✨ Trợ lý AVO', type: 'text'
+                                    userName: 'AVO Assistant', type: 'text'
                                 }).save();
                             }
                         } catch (err) {
@@ -603,8 +652,8 @@ io.on('connection', (socket) => {
     });
 });
 
-// SPA Fallback
-app.get('/*splat', (req, res) => {
+// SPA Fallback (Sử dụng regex /(.*)/ để hỗ trợ refresh trang trên toàn bộ ứng dụng trên Express 5)
+app.get(/(.*)/, (req, res) => {
     const indexPath = path.join(distPath, 'index.html');
     if (fs.existsSync(indexPath)) res.sendFile(indexPath);
     else res.status(404).send("Build not found");
@@ -622,14 +671,14 @@ cron.schedule('* * * * *', async () => {
                 const mailOptions = {
                     from: `"AVO Meeting" <${process.env.EMAIL_USER}>`,
                     to: meeting.invitedEmails.join(','),
-                    subject: `✉️ Thư mời họp: ${meeting.title}`,
+                    subject: `Invitation to meeting: ${meeting.title}`,
                     html: `
-                        <h3>Bạn được mời tham gia phòng họp: <b>${meeting.title}</b></h3>
-                        <p>Chủ phòng: <b>${meeting.hostName}</b> ${meeting.hostEmail ? `(${meeting.hostEmail})` : ''}</p>
-                        <p>Bắt đầu: <b>${new Date(meeting.startTime).toLocaleString('vi-VN')}</b></p>
-                        <p>Lời nhắn: <i>${meeting.description || 'Không có mô tả'}</i></p>
+                        <h3>You are invited to join the meeting: <b>${meeting.title}</b></h3>
+                        <p>Host: <b>${meeting.hostName}</b> ${meeting.hostEmail ? `(${meeting.hostEmail})` : ''}</p>
+                        <p>Start: <b>${new Date(meeting.startTime).toLocaleString('en-US')}</b></p>
+                        <p>Message: <i>${meeting.description || 'No description'}</i></p>
                         <hr/>
-                        <a href="${process.env.APP_URL || 'https://avomeet.site'}/?room=${meeting.roomId}${passwordParam}" style="display:inline-block;padding:10px 20px;background:#2563eb;color:white;text-decoration:none;border-radius:5px;font-weight:bold;">Tới Lịch Họp (Tham Gia)</a>
+                        <a href="${process.env.APP_URL || 'https://avomeet.site'}/?room=${meeting.roomId}${passwordParam}" style="display:inline-block;padding:10px 20px;background:#2563eb;color:white;text-decoration:none;border-radius:5px;font-weight:bold;">Go to Meeting (Join)</a>
                     `
                 };
                 await transporter.sendMail(mailOptions);
@@ -659,13 +708,13 @@ cron.schedule('* * * * *', async () => {
                     const mailOptions = {
                         from: `"AVO Meeting" <${process.env.EMAIL_USER}>`,
                         to: recipients.join(','),
-                        subject: `🚨 Nhắc nhở: Phòng họp "${meeting.title}" sắp bắt đầu!`,
+                        subject: `Reminder: Meeting "${meeting.title}" is about to start!`,
                         html: `
-                            <h3 style="color:#e11d48">Sắp đến giờ họp!</h3>
-                            <p>Cuộc họp <b>${meeting.title}</b> sẽ diễn ra trong vòng <b>${Math.ceil(timeDiffMinutes)} phút</b> nữa.</p>
-                            <p>Đừng để mọi người phải đợi nhé!</p>
+                            <h3 style="color:#e11d48">Meeting is about to start!</h3>
+                            <p>The meeting <b>${meeting.title}</b> will take place in <b>${Math.ceil(timeDiffMinutes)} minutes</b>.</p>
+                            <p>Don't keep everyone waiting!</p>
                             <hr/>
-                            <a href="${process.env.APP_URL || 'https://avomeet.site'}/?room=${meeting.roomId}${passwordParam}" style="display:inline-block;padding:10px 20px;background:#e11d48;color:white;text-decoration:none;border-radius:5px;font-weight:bold;">Vào phòng ngay</a>
+                            <a href="${process.env.APP_URL || 'https://avomeet.site'}/?room=${meeting.roomId}${passwordParam}" style="display:inline-block;padding:10px 20px;background:#e11d48;color:white;text-decoration:none;border-radius:5px;font-weight:bold;">Join Now</a>
                         `
                     };
                     await transporter.sendMail(mailOptions);
@@ -683,13 +732,13 @@ cron.schedule('* * * * *', async () => {
         for (const room of staleRooms) {
             await Room.updateOne({ _id: room._id }, { isActive: false, endedAt: new Date() });
             await Message.deleteMany({ roomId: room.roomId });
-            io.to(room.roomId).emit('signal', { type: 'room-closed', roomId: room.roomId, reason: 'Tự đóng sau 12 giờ không hoạt động' });
-            console.log(`⏰ Tự đóng phòng: ${room.roomId} (quá 12 giờ)`);
+            io.to(room.roomId).emit('signal', { type: 'room-closed', roomId: room.roomId, reason: 'Auto-close after 12 hours of inactivity' });
+            console.log(`Auto-close room: ${room.roomId} (over 12 hours)`);
         }
     } catch (e) {
         console.error("Cron Job Error:", e);
     }
 });
 server.listen(PORT, '0.0.0.0', () => {
-    console.log(`🚀 Node.js App Server is running on port: ${PORT}`);
+    console.log(`Node.js App Server is running on port: ${PORT}`);
 });

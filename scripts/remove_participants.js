@@ -6,9 +6,9 @@ mongoose.connect(process.env.MONGO_URI).then(async () => {
         {},
         { $unset: { participants: '' } }
     );
-    console.log('✅ Đã xóa participants khỏi', result.modifiedCount, 'documents');
+    console.log('Deleted participants from', result.modifiedCount, 'documents');
     mongoose.disconnect();
 }).catch(e => {
-    console.error('❌ Lỗi:', e.message);
+    console.error('Error:', e.message);
     process.exit(1);
 });

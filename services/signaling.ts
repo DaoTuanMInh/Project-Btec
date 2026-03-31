@@ -38,7 +38,7 @@ class SignalingService {
     this.socket.on('force-logout', (msg: any) => {
       console.warn("Force Logout:", msg.reason);
 
-      // Custom overlay thay cho alert() xấu xí
+      // Custom overlay 
       const overlay = document.createElement('div');
       overlay.style.cssText = `
         position: fixed; inset: 0; z-index: 99999;
@@ -135,13 +135,13 @@ class SignalingService {
       console.log(`Requesting Zero Trust Access Token...`);
 
       const authToken = getToken(); // Lấy JWT từ session
-      if (!authToken) throw new Error('Chưa đăng nhập hoặc phiên hết hạn');
+      if (!authToken) throw new Error('Not logged in or session expired');
 
       const response = await fetch(`/api/token`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${authToken}`  // ← fix: gửi JWT token
+          'Authorization': `Bearer ${authToken}`  // gửi JWT token
         },
         body: JSON.stringify({
           roomId,
@@ -152,11 +152,11 @@ class SignalingService {
 
       if (!response.ok) {
         const errData = await response.json().catch(() => ({}));
-        throw new Error(errData.error || `Server trả ${response.status}`);
+        throw new Error(errData.error || `The server returns ${response.status}`);
       }
 
       const data = await response.json();
-      if (!data.token) throw new Error('Không nhận được access token');
+      if (!data.token) throw new Error('Failed to get access token');
 
       this.currentUserToken = data.token;
       console.log('Token obtained. Joining Secure Socket Room...');
@@ -174,7 +174,7 @@ class SignalingService {
       });
     } catch (err: any) {
       console.error('Zero Trust Auth Failed:', err);
-      alert(`Lỗi tham gia phòng!\n\n${err.message || 'Không thể kết nối với server.'}\n\nVui lòng tải lại trang và thử lại.`);
+      alert(`Failed to join room!\n\n${err.message || 'Failed to connect to server.'}\n\nPlease reload the page and try again.`);
       throw err;
     }
   }

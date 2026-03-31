@@ -38,22 +38,7 @@ const App: React.FC = () => {
       const user = getUser();
       if (user) {
         setAuthUser(user);
-        if (user.currentRoom) {
-          console.log("Resuming Active Session:", user.currentRoom);
-          signaling.checkRoom(user.currentRoom, undefined, user.id).then(checkResult => {
-            const isHost = checkResult.isHost || false;
-            console.log("Resume Role:", isHost ? "HOST" : "GUEST");
-
-            navigator.mediaDevices.getUserMedia({ video: true, audio: true })
-              .then(stream => {
-                setLocalStream(stream);
-                setRoomId(user.currentRoom!);
-                setCurrentUser({ id: user.id || 'me', name: user.username, isHost: isHost, avatar: user.avatar });
-                setStatus(MeetingStatus.ACTIVE);
-              })
-              .catch(e => console.error("Auto-resume media error", e));
-          });
-        }
+        // Let SetupScreen handle the ConfirmModal for user.currentRoom instead of forcing them directly into the room
       }
     }
     setIsAuthChecked(true);
@@ -71,7 +56,6 @@ const App: React.FC = () => {
 
   // Restore Session on Load
   useEffect(() => {
-    // ... (keep existing logic)
     const savedSession = sessionStorage.getItem('avo-meeting-session');
     if (savedSession) {
       try {
@@ -172,21 +156,6 @@ const App: React.FC = () => {
     const user = getUser();
     if (user) {
       setAuthUser(user);
-      if (user.currentRoom) {
-        signaling.checkRoom(user.currentRoom, undefined, user.id).then(checkResult => {
-          const isHost = checkResult.isHost || false;
-          console.log("Resume Role:", isHost ? "HOST" : "GUEST");
-
-          navigator.mediaDevices.getUserMedia({ video: true, audio: true })
-            .then(stream => {
-              setLocalStream(stream);
-              setRoomId(user.currentRoom!);
-              setCurrentUser({ id: user.id || 'me', name: user.username, isHost: isHost, avatar: user.avatar });
-              setStatus(MeetingStatus.ACTIVE);
-            })
-            .catch(e => console.error("Auto-resume media error", e));
-        });
-      }
     }
   }} />;
 

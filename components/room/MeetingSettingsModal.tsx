@@ -135,6 +135,19 @@ const MeetingSettingsModal: React.FC<Props> = ({
                                         className="w-5 h-5 rounded border-slate-600 text-red-600 focus:ring-red-500 bg-slate-700"
                                     />
                                 </label>
+
+                                <label className="flex items-center justify-between p-4 bg-slate-800/30 rounded-xl cursor-pointer hover:bg-slate-800/50 transition-colors border border-slate-700/50">
+                                    <div>
+                                        <span className="block font-medium text-slate-200">Waiting Room</span>
+                                        <span className="text-xs text-slate-500">Hold participants in a lobby for approval</span>
+                                    </div>
+                                    <input
+                                        type="checkbox"
+                                        checked={roomSettings.waitingRoom}
+                                        onChange={e => onUpdateSettings({ ...roomSettings, waitingRoom: e.target.checked })}
+                                        className="w-5 h-5 rounded border-slate-600 text-blue-600 focus:ring-blue-500 bg-slate-700"
+                                    />
+                                </label>
                                 <label className="flex items-center justify-between p-4 bg-slate-800/30 rounded-xl cursor-pointer hover:bg-slate-800/50 transition-colors border border-slate-700/50">
                                     <div>
                                         <span className="block font-medium text-slate-200">Require Camera</span>

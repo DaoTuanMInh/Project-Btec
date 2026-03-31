@@ -51,7 +51,27 @@ const MeetingRoom: React.FC<Props> = ({ user, roomId, localStream, onLeave, sett
     localStream, user, roomId, pcRef: rtc.pcRef, setPeers: state.setPeers, settings: state.roomSettings
   });
 
-  // 4. Mute/Video logic (Simple toggles)
+  // Local State Wrappers for Signaling
+  const [isMuted, setIsMuted] = React.useState(!localStream.getAudioTracks()[0]?.enabled);
+  const [isVideoOff, setIsVideoOff] = React.useState(!localStream.getVideoTracks()[0]?.enabled);
+  const isMutedRef = useRef(!localStream.getAudioTracks()[0]?.enabled);
+  const isVideoOffRef = useRef(!localStream.getVideoTracks()[0]?.enabled);
+
+  // --- STRICT STATE SYNCHRONIZATION ---
+  useEffect(() => {
+    const audioTrack = localStream.getAudioTracks()[0];
+    const videoTrack = localStream.getVideoTracks()[0];
+    const hardwareMuted = audioTrack ? !audioTrack.enabled : (user.muted ?? false);
+    const hardwareVideoOff = videoTrack ? !videoTrack.enabled : (user.videoOff ?? false);
+
+    setIsMuted(hardwareMuted);
+    isMutedRef.current = hardwareMuted;
+    setIsVideoOff(hardwareVideoOff);
+    isVideoOffRef.current = hardwareVideoOff;
+  }, [localStream, user.muted, user.videoOff]);
+
+
+  // 4. Mute/Video logic
   const toggleMute = useCallback((force = false) => {
     if (!force && state.roomSettingsRef.current?.requireMic && !isMutedRef.current) {
       state.showToast("The room settings require Mic to be turned on!", 'warning'); return;
@@ -61,7 +81,7 @@ const MeetingRoom: React.FC<Props> = ({ user, roomId, localStream, onLeave, sett
     setIsMuted(newVal); isMutedRef.current = newVal;
     state.setPeers(prev => prev.map(p => p.isLocal ? { ...p, muted: newVal } : p));
     signaling.send('user-update', user.id, undefined, roomId, { muted: newVal });
-  }, [roomId, user.id]);
+  }, [roomId, user.id, localStream, state]);
 
   const toggleVideo = useCallback((force = false) => {
     if (!force && state.roomSettingsRef.current?.requireCamera && !isVideoOffRef.current) {
@@ -72,40 +92,7 @@ const MeetingRoom: React.FC<Props> = ({ user, roomId, localStream, onLeave, sett
     setIsVideoOff(newVal); isVideoOffRef.current = newVal;
     state.setPeers(prev => prev.map(p => p.isLocal ? { ...p, videoOff: newVal } : p));
     signaling.send('user-update', user.id, undefined, roomId, { videoOff: newVal });
-  }, [roomId, user.id]);
-
-  // Local State Wrappers for Signaling
-  // Local State Wrappers for Signaling
-  const [isMuted, setIsMuted] = React.useState(!localStream.getAudioTracks()[0]?.enabled);
-  const [isVideoOff, setIsVideoOff] = React.useState(!localStream.getVideoTracks()[0]?.enabled);
-  const isMutedRef = useRef(!localStream.getAudioTracks()[0]?.enabled);
-  const isVideoOffRef = useRef(!localStream.getVideoTracks()[0]?.enabled);
-  // --- STRICT STATE SYNCHRONIZATION ---
-
-  // 1. Initial State from Tracks (Run once on mount)
-  useEffect(() => {
-    const audioTrack = localStream.getAudioTracks()[0];
-    const videoTrack = localStream.getVideoTracks()[0];
-
-    // Explicitly read current hardware state
-    const hardwareMuted = audioTrack ? !audioTrack.enabled : (user.muted ?? false);
-    const hardwareVideoOff = videoTrack ? !videoTrack.enabled : (user.videoOff ?? false);
-
-    console.log("[MeetingRoom] Mount Init:", {
-      hardwareMuted,
-      hardwareVideoOff,
-      trackAudioEnabled: audioTrack?.enabled,
-      trackVideoEnabled: videoTrack?.enabled,
-      userPropMuted: user.muted
-    });
-
-    // Force internal state to match hardware
-    setIsMuted(hardwareMuted);
-    isMutedRef.current = hardwareMuted; // Update ref immediately
-
-    setIsVideoOff(hardwareVideoOff);
-    isVideoOffRef.current = hardwareVideoOff;
-  }, [localStream, user.muted, user.videoOff]);
+  }, [roomId, user.id, localStream, state]);
 
 
   // 2. Verified Entry Sync (Run ONCE when isVerified becomes true)
@@ -371,6 +358,8 @@ const MeetingRoom: React.FC<Props> = ({ user, roomId, localStream, onLeave, sett
 
         <VideoGrid peers={state.peers} isLocalBlurred={media.isBlurred} onToggleFullScreen={() => document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen()} />
 
+
+
         {/* CONTROLS */}
         <div onClick={e => e.stopPropagation()} className={`fixed bottom-6 left-0 right-0 z-50 flex flex-col items-center gap-4 transition-all px-4 ${!state.showControls ? 'translate-y-[150%]' : ''}`}>
 
@@ -394,7 +383,7 @@ const MeetingRoom: React.FC<Props> = ({ user, roomId, localStream, onLeave, sett
             </div>
           </div>
 
-          <div className="flex gap-2 md:gap-3 p-2 md:p-3 glass-effect rounded-[2rem] bg-slate-900/80 max-w-full overflow-x-auto no-scrollbar shadow-2xl border border-white/5 pointer-events-auto">
+          <div className="flex flex-wrap justify-center gap-2 md:gap-3 p-2 md:p-3 glass-effect rounded-[2rem] bg-slate-900/80 max-w-[95vw] lg:max-w-full shadow-2xl border border-white/5 pointer-events-auto">
             <button onClick={() => toggleMute()} className={`w-10 h-10 md:w-12 md:h-12 shrink-0 rounded-full flex items-center justify-center transition-colors ${isMuted ? 'bg-red-500 text-white' : 'bg-slate-800 text-slate-200 hover:bg-slate-700'}`}>{isMuted ? <MicOff size={20} /> : <Mic size={20} />}</button>
             <button onClick={() => toggleVideo()} className={`w-10 h-10 md:w-12 md:h-12 shrink-0 rounded-full flex items-center justify-center transition-colors ${isVideoOff ? 'bg-red-500 text-white' : 'bg-slate-800 text-slate-200 hover:bg-slate-700'}`}>{isVideoOff ? <VideoOff size={20} /> : <Video size={20} />}</button>
             <button onClick={() => media.setIsBlurred(!media.isBlurred)} className={`w-10 h-10 md:w-12 md:h-12 shrink-0 rounded-full flex items-center justify-center transition-colors ${media.isBlurred ? 'bg-emerald-600 text-white' : 'bg-slate-800 text-slate-200 hover:bg-slate-700'}`}>{media.isBlurred ? <EyeOff size={20} /> : <Eye size={20} />}</button>
@@ -405,6 +394,8 @@ const MeetingRoom: React.FC<Props> = ({ user, roomId, localStream, onLeave, sett
                 <button onClick={() => state.setIsReactionMenuOpen(!state.isReactionMenuOpen)} className={`w-10 h-10 md:w-12 md:h-12 rounded-full flex items-center justify-center transition-all ${state.isReactionMenuOpen ? 'bg-yellow-500/20 text-yellow-400' : 'bg-slate-800 text-yellow-400 hover:bg-slate-700'}`}><Smile size={20} /></button>
               </div>
             )}
+
+
 
             <button onClick={() => {
               if (state.isSidebarOpen && state.activeTab === 'chat') {

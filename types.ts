@@ -66,6 +66,7 @@ export interface ReactionItem {
 }
 
 
+
 export type SignalingMessage =
   | { type: 'join'; from: string; to?: string; roomId: string; payload: { userName: string; password?: string } }
   | { type: 'offer'; from: string; to?: string; roomId: string; payload: { offer: RTCSessionDescriptionInit; userName: string; muted: boolean; videoOff: boolean; settings?: MeetingSettings } }

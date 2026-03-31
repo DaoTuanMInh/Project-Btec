@@ -18,6 +18,7 @@ export const useMeetingState = (user: User, initialSettings?: MeetingSettings) =
     const [activeTab, setActiveTab] = useState<'chat' | 'participants' | 'requests'>(user.isHost ? 'requests' : 'participants');
     const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
     const [isReactionMenuOpen, setIsReactionMenuOpen] = useState(false);
+
     const [showControls, setShowControls] = useState(true);
     const [isFullScreen, setIsFullScreen] = useState(false);
 
@@ -32,7 +33,7 @@ export const useMeetingState = (user: User, initialSettings?: MeetingSettings) =
 
     // 4. Room Settings
     const [roomSettings, setRoomSettings] = useState<MeetingSettings>(initialSettings || {
-        waitingRoom: false,
+        waitingRoom: true,
         requireMic: false,
         requireCamera: false,
         lockRoom: false,
@@ -66,10 +67,12 @@ export const useMeetingState = (user: User, initialSettings?: MeetingSettings) =
         peers, setPeers,
         messages, setMessages,
         reactions, setReactions, // Added this
+
         isSidebarOpen, setIsSidebarOpen, isSidebarOpenRef,
         activeTab, setActiveTab, activeTabRef,
         isSettingsModalOpen, setIsSettingsModalOpen,
         isReactionMenuOpen, setIsReactionMenuOpen,
+
         showControls, setShowControls,
         isFullScreen, setIsFullScreen,
         mediaRequestModal, setMediaRequestModal,

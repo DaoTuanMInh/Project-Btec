@@ -60,7 +60,7 @@ const SetupScreen: React.FC<Props> = ({ onJoin, setupMedia, initialName = "", us
     requireMic: false,
     requireCamera: false,
     allowScreenShare: true,
-    waitingRoom: false,
+    waitingRoom: true,
     lockRoom: false,
     allowReactions: true,
     autoCloseWhenEmpty: true,
@@ -183,10 +183,8 @@ const SetupScreen: React.FC<Props> = ({ onJoin, setupMedia, initialName = "", us
     setScheduleOpen(false);
     setRoom(targetRoomId);
     setMode('join');
-    // Give state a moment to settle, then join
-    setTimeout(() => {
-      executeJoin(targetRoomId);
-    }, 100);
+    // Auto-join
+    setTimeout(() => executeJoin(targetRoomId), 100);
   };
 
   const joinFormProps = {
