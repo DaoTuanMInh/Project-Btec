@@ -39,7 +39,8 @@ export const useMeetingState = (user: User, initialSettings?: MeetingSettings) =
         lockRoom: false,
         allowScreenShare: false,
         allowReactions: true,
-        password: ''
+        password: '',
+        transcriptionLang: 'vi-VN'
     });
 
     // 5. Access Control

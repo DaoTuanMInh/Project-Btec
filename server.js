@@ -16,9 +16,11 @@ const User = require('./models/User');
 const Message = require('./models/Message');
 const Room = require('./models/Room');
 const ScheduledMeeting = require('./models/ScheduledMeeting');
+const MeetingContent = require('./models/MeetingContent');
 const crypto = require('crypto');
 const cron = require('node-cron');
 const { GoogleGenerativeAI } = require('@google/generative-ai');
+const { Document, Packer, Paragraph, TextRun } = require('docx');
 
 // Setup Encryption configuration
 const ENCRYPTION_KEY = crypto.createHash('sha256').update(process.env.JWT_SECRET || 'avo-secret-zero-trust-key-2024').digest('base64').substring(0, 32);
@@ -68,6 +70,9 @@ const uploadsPath = path.join(__dirname, 'uploads');
 if (!fs.existsSync(uploadsPath)) fs.mkdirSync(uploadsPath);
 app.use('/uploads', express.static(uploadsPath));
 
+// serve favicon to avoid browser 404 noise
+app.get('/favicon.ico', (req, res) => res.sendStatus(204));
+
 // 3. HTTP Server & Socket.io Setup (SSL will be handled by Nginx on production)
 const server = http.createServer(app);
 const io = new Server(server, {
@@ -98,6 +103,263 @@ const transporter = nodemailer.createTransport({
 });
 
 // --- API ROUTES ---
+
+const { spawn, spawnSync } = require('child_process');
+const ffmpegStatic = (() => {
+    try {
+        return require('ffmpeg-static');
+    } catch (e) {
+        return null;
+    }
+})();
+
+const getFfmpegExecutable = () => {
+    if (ffmpegStatic) return ffmpegStatic;
+
+    // Windows `where`, Unix `which`
+    try {
+        const command = process.platform === 'win32' ? 'where' : 'which';
+        const result = spawnSync(command, ['ffmpeg'], { shell: false });
+        if (result.status === 0 && result.stdout) {
+            const found = result.stdout.toString().split(/\r?\n/).find(ln => ln.trim());
+            if (found) return found.trim();
+        }
+    } catch (_) {
+        // ignore
+    }
+    return null;
+};
+
+const saveToDocx = async (text, title, outputPath) => {
+    const doc = new Document({
+        sections: [{
+            properties: {},
+            children: text.split('\n').map(line => new Paragraph({
+                children: [new TextRun(line)]
+            }))
+        }]
+    });
+    const buffer = await Packer.toBuffer(doc);
+    fs.writeFileSync(outputPath, buffer);
+};
+
+// Simple in-memory queue for audio processing
+const meetingContentQueue = [];
+let workerBusy = false;
+
+const transcribeAudioFile = async (wavPath) => {
+    if (!process.env.GROQ_API_KEY) throw new Error('GROQ_API_KEY not set');
+    if (!wavPath || !fs.existsSync(wavPath)) throw new Error(`Transcription API failed: wav file not found at ${wavPath}`);
+
+    const fileBuffer = fs.readFileSync(wavPath);
+    const blob = new Blob([fileBuffer], { type: 'audio/wav' });
+    const formData = new FormData();
+    formData.append('model', 'whisper-large-v3');
+    formData.append('file', blob, 'audio.wav');
+
+    const resp = await fetch('https://api.groq.com/openai/v1/audio/transcriptions', {
+        method: 'POST',
+        headers: {
+            'Authorization': `Bearer ${process.env.GROQ_API_KEY}`
+        },
+        body: formData
+    });
+    if (!resp.ok) {
+        const text = await resp.text();
+        throw new Error(`Transcription API failed: ${text}`);
+    }
+
+    const data = await resp.json();
+    return data.text || '';
+};
+
+const formatTranscriptWithSpeakers = async (rawText, participants) => {
+    if (!process.env.GROQ_API_KEY) return rawText;
+    
+    const contextStr = participants ? `Danh sách những người tham gia trong cuộc họp: ${participants}.\n` : '';
+    const prompt = `Bạn là một AI xử lý ngôn ngữ tự nhiên. Dưới đây là đoạn hội thoại chưa được phân định người nói:\n\n${rawText}\n\n${contextStr}Hãy phân tích và viết lại nó theo dạng kịch bản có tên người nói. Dựa vào cách họ xưng hô (ví dụ có gọi tên nhau Minh ơi, Long à...) hoặc từ giọng văn để nhận diện, hãy gán tên người nói ở đầu mỗi câu. Nếu không biết tên, có thể dùng "Người 1", "Người 2"...\nTuyệt đối chỉ trả về đoạn hội thoại đã xử lý với cấu trúc Tên: Lời nói, không thêm bất kỳ nhận xét, phân tích hay giới thiệu nào.\nVí dụ:\nMinh: bạn ơi\nLong: ơi mình đây`;
+
+    try {
+        const resp = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${process.env.GROQ_API_KEY}`
+            },
+            body: JSON.stringify({
+                model: 'llama-3.3-70b-versatile',
+                messages: [
+                    { role: 'system', content: 'Bạn là chuyên gia phân tích hội thoại.' },
+                    { role: 'user', content: prompt }
+                ],
+                temperature: 0.1,
+                max_tokens: 3000
+            })
+        });
+        if (resp.ok) {
+            const body = await resp.json();
+            const formatted = body?.choices?.[0]?.message?.content?.trim();
+            if (formatted && formatted.length > 5) return formatted;
+        }
+    } catch (e) {
+        console.error('Format transcript error:', e);
+    }
+    return rawText;
+};
+
+const summarizeText = async (text) => {
+    if (!process.env.GROQ_API_KEY) throw new Error('GROQ_API_KEY not set');
+
+    const prompt = `Dưới đây là nội dung cuộc họp:
+${text}
+
+Hãy tóm tắt nội dung cuộc họp trên. 
+Yêu cầu:
+1. Luôn bắt đầu bằng câu: "Dưới đây là bản tóm tắt cuộc họp:"
+2. KHÔNG sử dụng ký tự in đậm (dấu **), in hoa toàn bộ hay bất kỳ định dạng đặc biệt nào. Chỉ dùng văn bản thuần túy.
+3. Cấu trúc tóm tắt gồm đúng 2 mục sau:
+1) Các điểm chính
+2) Kết luận/đề xuất
+`;
+
+    const resp = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${process.env.GROQ_API_KEY}`
+        },
+        body: JSON.stringify({
+            model: 'llama-3.3-70b-versatile',
+            messages: [
+                { role: 'system', content: 'Bạn là chuyên gia tóm tắt cuộc họp. Luôn trả về kết quả là văn bản thuần túy (Plain Text), tuyệt đối không dùng dấu **, không dùng in hoa toàn bộ tiêu đề, không dùng Markdown.' },
+                { role: 'user', content: prompt }
+            ],
+            temperature: 0.2,
+            max_tokens: 900
+        })
+    });
+
+    if (!resp.ok) {
+        const text = await resp.text();
+        throw new Error(`Summary API failed: ${text}`);
+    }
+
+    const body = await resp.json();
+    const summary = body?.choices?.[0]?.message?.content || body?.choices?.[0]?.text || '';
+    return summary.trim();
+};
+
+const enqueuePendingMeetingContents = async () => {
+    try {
+        const pendingContents = await MeetingContent.find({ status: { $in: ['pending', 'processing', 'failed'] } });
+        for (const item of pendingContents) {
+            if (!meetingContentQueue.some(q => q.contentId.toString() === item._id.toString())) {
+                meetingContentQueue.push({
+                    contentId: item._id,
+                    originalPath: item.audioPath,
+                    wavPath: item.wavPath || path.join(uploadsPath, `${Date.now()}-${item._id}-post.wav`),
+                    meetingContent: item
+                });
+                item.status = 'pending';
+                await item.save();
+            }
+        }
+        processMeetingQueue();
+    } catch (err) {
+        console.error('[MeetingContent] enqueue pending failed', err);
+    }
+};
+
+const processMeetingQueue = async () => {
+    if (workerBusy || meetingContentQueue.length === 0) return;
+    workerBusy = true;
+
+    const job = meetingContentQueue.shift();
+    const { contentId, originalPath, wavPath, meetingContent } = job;
+
+    console.log(`[MeetingContent Worker] Processing job: ${contentId}`);
+
+    try {
+        if (!originalPath || !fs.existsSync(originalPath)) {
+            throw new Error(`Original audio file not found: ${originalPath}`);
+        }
+
+        // Convert webm to wav 16k mono
+        const ffmpegExecutable = getFfmpegExecutable();
+        if (!ffmpegExecutable) {
+            throw new Error('ffmpeg binary not found. Install ffmpeg-static or ensure it is on PATH.');
+        }
+
+        await new Promise((resolve, reject) => {
+            const ffmpeg = spawn(ffmpegExecutable, ['-y', '-i', originalPath, '-ac', '1', '-ar', '16000', wavPath]);
+            
+            let stderr = '';
+            ffmpeg.stderr.on('data', data => { stderr += data.toString(); });
+            ffmpeg.on('error', reject);
+            ffmpeg.on('close', code => {
+                if (code !== 0) {
+                    return reject(new Error(`ffmpeg failed (code ${code}): ${stderr.slice(-200)}`));
+                }
+                resolve(true);
+            });
+        });
+
+        meetingContent.wavPath = wavPath;
+        meetingContent.status = 'processing';
+        await meetingContent.save();
+
+        console.log(`[MeetingContent Worker] Transcribing: ${contentId}`);
+        let transcript = meetingContent.transcriptText;
+        if (!transcript) {
+            const rawTranscript = await transcribeAudioFile(wavPath);
+            console.log(`[MeetingContent Worker] Identifying speakers: ${contentId}`);
+            transcript = await formatTranscriptWithSpeakers(rawTranscript, meetingContent.participants);
+        } else {
+            console.log(`[MeetingContent Worker] Using provided local transcript: ${contentId}`);
+        }
+        
+        console.log(`[MeetingContent Worker] Summarizing: ${contentId}`);
+        const summary = await summarizeText(transcript);
+
+        const transcriptPath = path.join(uploadsPath, `${Date.now()}-${meetingContent._id}-transcript.txt`);
+        // Add UTF-8 BOM (\ufeff) to help editors like Notepad recognize it as UTF-8
+        fs.writeFileSync(transcriptPath, "\ufeff" + transcript, 'utf8');
+
+        const summaryPath = path.join(uploadsPath, `${Date.now()}-${meetingContent._id}-summary.txt`);
+        const summaryDocxPath = path.join(uploadsPath, `${Date.now()}-${meetingContent._id}-summary.docx`);
+        const transcriptDocxPath = path.join(uploadsPath, `${Date.now()}-${meetingContent._id}-transcript.docx`);
+        
+        fs.writeFileSync(summaryPath, "\ufeff" + summary, 'utf8');
+        await saveToDocx(summary, meetingContent.title || 'Summary', summaryDocxPath);
+        await saveToDocx(transcript, meetingContent.title || 'Transcript', transcriptDocxPath);
+
+        meetingContent.transcriptText = transcript;
+        meetingContent.transcriptPath = transcriptPath;
+        meetingContent.transcriptDocxPath = transcriptDocxPath;
+        meetingContent.summaryText = summary;
+        meetingContent.summaryPath = summaryPath;
+        meetingContent.summaryDocxPath = summaryDocxPath;
+
+        meetingContent.status = 'completed';
+        meetingContent.updatedAt = new Date();
+        await meetingContent.save();
+        console.log(`[MeetingContent Worker] Completed: ${contentId}`);
+
+    } catch (err) {
+        console.error(`[MeetingContent Worker] Error processing job ${contentId}:`, err);
+        try {
+            meetingContent.status = 'failed';
+            meetingContent.errorMessage = err.message || String(err);
+            meetingContent.updatedAt = new Date();
+            await meetingContent.save();
+        } catch (saveErr) {
+            console.error(`[MeetingContent Worker] Final save failed for ${contentId}:`, saveErr);
+        }
+    } finally {
+        workerBusy = false;
+        setTimeout(processMeetingQueue, 1000);
+    }
+};
 
 // JWT Verify Middleware
 const verifyToken = (req, res, next) => {
@@ -222,6 +484,168 @@ app.post('/api/reset-password', async (req, res) => {
     }
 });
 
+app.post('/api/meetings/:roomId/record', verifyToken, upload.single('audio'), async (req, res) => {
+    const roomId = req.params.roomId;
+    const hostId = req.userId;
+    if (!req.file) return res.status(400).json({ error: 'No audio file uploaded' });
+
+    // Optional: verify user is host for room (scheduled/active meeting) here
+    const schedule = await ScheduledMeeting.findOne({ roomId });
+    if (schedule && schedule.hostId !== hostId) {
+        return res.status(403).json({ error: 'Only host can upload recordings' });
+    }
+
+    const filename = req.body.name || `meeting-${Date.now()}`;
+    const awsFilename = `${Date.now()}-${filename}.webm`;
+    const originalPath = req.file.path;
+    const wavPath = path.join(uploadsPath, `${Date.now()}-${filename}.wav`);
+
+    try {
+        const meetingContent = new MeetingContent({
+            roomId,
+            meetingId: schedule ? schedule._id : undefined,
+            hostId,
+            title: filename,
+            description: req.body.description || '',
+            participants: req.body.participants || '',
+            transcriptText: req.body.rawTranscript || '',
+            status: 'pending',
+            audioPath: originalPath,
+            wavPath: wavPath
+        });
+        await meetingContent.save();
+
+        meetingContentQueue.push({ contentId: meetingContent._id, originalPath, wavPath, meetingContent });
+        processMeetingQueue();
+
+        res.status(202).json({ success: true, contentId: meetingContent._id });
+    } catch (err) {
+        console.error('record handler', err);
+        res.status(500).json({ error: 'Unable to enqueue recording' });
+    }
+});
+
+// Force download file endpoint
+app.get('/api/download-file/:filename', async (req, res) => {
+    const filename = req.params.filename;
+    const filePath = path.join(uploadsPath, filename);
+    if (!fs.existsSync(filePath)) {
+        return res.status(404).send('File not found');
+    }
+
+    try {
+        // Try to find the document to get the original title
+        const content = await MeetingContent.findOne({
+            $or: [
+                { transcriptPath: { $regex: filename } },
+                { transcriptDocxPath: { $regex: filename } },
+                { summaryPath: { $regex: filename } },
+                { summaryDocxPath: { $regex: filename } }
+            ]
+        });
+
+        let downloadName = filename;
+        if (content) {
+            const ext = path.extname(filename);
+            const baseTitle = content.title.replace(/[^a-z0-9]/gi, '_').toLowerCase();
+            const type = filename.includes('summary') ? 'Summary' : 'Transcript';
+            downloadName = `${baseTitle}_${type}${ext}`;
+        }
+        res.download(filePath, downloadName);
+    } catch (e) {
+        res.download(filePath);
+    }
+});
+
+app.get('/api/meetings/content/:userId', verifyToken, async (req, res) => {
+    if (req.userId !== req.params.userId) {
+        return res.status(403).json({ error: 'Not allowed' });
+    }
+
+    try {
+        const contents = await MeetingContent.find({ hostId: req.params.userId }).sort({ createdAt: -1 });
+        const formatted = contents.map(item => {
+            const audioUrl = item.audioPath ? `/uploads/${path.basename(item.audioPath)}` : null;
+            const transcriptUrl = item.transcriptPath ? `/api/download-file/${path.basename(item.transcriptPath)}` : null;
+            const transcriptDocxUrl = item.transcriptDocxPath ? `/api/download-file/${path.basename(item.transcriptDocxPath)}` : null;
+            const summaryUrl = item.summaryPath ? `/api/download-file/${path.basename(item.summaryPath)}` : null;
+            const summaryDocxUrl = item.summaryDocxPath ? `/api/download-file/${path.basename(item.summaryDocxPath)}` : null;
+            return {
+                _id: item._id,
+                roomId: item.roomId,
+                meetingId: item.meetingId,
+                hostId: item.hostId,
+                title: item.title,
+                description: item.description,
+                status: item.status,
+                transcriptText: item.transcriptText,
+                summaryText: item.summaryText,
+                errorMessage: item.errorMessage,
+                audioUrl,
+                transcriptUrl,
+                transcriptDocxUrl,
+                summaryUrl,
+                summaryDocxUrl,
+                createdAt: item.createdAt,
+                updatedAt: item.updatedAt
+            };
+        });
+
+        res.json(formatted);
+    } catch (err) {
+        console.error('content list', err);
+        res.status(500).json({ error: 'Unable to fetch meeting contents' });
+    }
+});
+
+app.delete('/api/meetings/content/:contentId', verifyToken, async (req, res) => {
+    try {
+        const content = await MeetingContent.findById(req.params.contentId);
+        if (!content) return res.status(404).json({ error: 'Meeting content not found' });
+        if (content.hostId !== req.userId) return res.status(403).json({ error: 'Not allowed' });
+
+        [content.audioPath, content.wavPath, content.transcriptPath, content.summaryPath, content.summaryDocxPath].forEach(filePath => {
+            if (filePath && fs.existsSync(filePath)) fs.unlinkSync(filePath);
+        });
+
+        await MeetingContent.deleteOne({ _id: content._id });
+        return res.json({ success: true });
+    } catch (err) {
+        console.error('delete meeting content', err);
+        return res.status(500).json({ error: 'Error deleting content' });
+    }
+});
+
+const retryMeetingContentHandler = async (req, res) => {
+    try {
+        const content = await MeetingContent.findById(req.params.contentId);
+        if (!content) return res.status(404).json({ error: 'Meeting content not found' });
+        if (content.hostId !== req.userId) return res.status(403).json({ error: 'Not allowed' });
+
+        if (!content.audioPath || !fs.existsSync(content.audioPath)) {
+            return res.status(400).json({ error: 'Original audio file missing; cannot retry' });
+        }
+
+        content.status = 'pending';
+        await content.save();
+
+        meetingContentQueue.push({
+            contentId: content._id,
+            originalPath: content.audioPath,
+            wavPath: content.wavPath || path.join(uploadsPath, `${Date.now()}-${content._id}-retry.wav`),
+            meetingContent: content
+        });
+        processMeetingQueue();
+
+        return res.json({ success: true, message: 'Retry enqueued' });
+    } catch (err) {
+        console.error('retry meeting content', err);
+        return res.status(500).json({ error: 'Error retrying content' });
+    }
+};
+
+app.post('/api/meetings/content/:contentId/retry', verifyToken, retryMeetingContentHandler);
+app.get('/api/meetings/content/:contentId/retry', verifyToken, retryMeetingContentHandler);
 
 // ===== AI API =====
 app.post('/api/ai/summarize-chat', verifyToken, async (req, res) => {
@@ -739,6 +1163,10 @@ cron.schedule('* * * * *', async () => {
         console.error("Cron Job Error:", e);
     }
 });
+
+// Ensure pending/failed contents are processed on server startup
+enqueuePendingMeetingContents();
+
 server.listen(PORT, '0.0.0.0', () => {
     console.log(`Node.js App Server is running on port: ${PORT}`);
 });

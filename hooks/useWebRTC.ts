@@ -14,6 +14,7 @@ interface UseWebRTCProps {
     isSidebarOpenRef: React.MutableRefObject<boolean>;
     activeTabRef: React.MutableRefObject<'chat' | 'participants' | 'requests'>;
     processedMsgIdsRef: React.MutableRefObject<Set<string>>;
+    currentVideoTrackRef?: React.MutableRefObject<MediaStreamTrack | null>;
 }
 
 export const useWebRTC = ({
@@ -26,7 +27,8 @@ export const useWebRTC = ({
     transcriptRef,
     isSidebarOpenRef,
     activeTabRef,
-    processedMsgIdsRef
+    processedMsgIdsRef,
+    currentVideoTrackRef
 }: UseWebRTCProps) => {
     const { showToast } = useToast();
 
@@ -174,8 +176,11 @@ export const useWebRTC = ({
         };
 
         // Add local tracks
-        const tracks = localStream.getTracks();
-        tracks.forEach(track => pc.addTrack(track, localStream));
+        const audioTrack = localStream.getAudioTracks()[0];
+        if (audioTrack) pc.addTrack(audioTrack, localStream);
+
+        const videoTrack = currentVideoTrackRef?.current || localStream.getVideoTracks()[0];
+        if (videoTrack) pc.addTrack(videoTrack, localStream);
 
         pcRef.current[remoteId] = pc;
         return pc;

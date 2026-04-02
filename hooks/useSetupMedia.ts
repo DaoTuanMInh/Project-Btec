@@ -63,8 +63,16 @@ export const useSetupMedia = () => {
                 previewStreamRef.current.getTracks().forEach(t => t.stop());
             }
 
-            console.log("Requesting camera access...");
-            const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+            console.log("Requesting camera access with noise suppression...");
+            const stream = await navigator.mediaDevices.getUserMedia({
+                video: true,
+                audio: {
+                    echoCancellation: true,
+                    noiseSuppression: true,
+                    sampleRate: 48000,
+                    channelCount: 1
+                }
+            });
 
             // Apply Hardware Intent
             const intentCamera = manual || isCameraOnRef.current;

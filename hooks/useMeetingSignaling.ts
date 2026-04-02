@@ -398,6 +398,10 @@ export const useMeetingSignaling = ({
                     setTimeout(() => setReactions(prev => prev.filter(r => r.id !== newR.id)), 6000);
                     break;
 
+                case 'transcript-chunk':
+                    if (transcriptRef.current) transcriptRef.current.push(`${msg.payload.userName}: ${msg.payload.text}`);
+                    break;
+
 
             }
         };

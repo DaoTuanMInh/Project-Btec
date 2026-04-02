@@ -185,7 +185,10 @@ export const verifyEmailChange = async (userId: string, newEmail: string, code: 
 };
 
 export const getMeetingHistory = async (userId: string) => {
-  const res = await fetch(`/api/user/meetings/${userId}`);
+  const token = getToken();
+  const res = await fetch(`/api/user/meetings/${userId}`, {
+    headers: token ? { Authorization: `Bearer ${token}` } : undefined
+  });
   const data = await res.json();
   if (!res.ok) throw new Error(data.error || "Failed to get meeting history");
   return data;

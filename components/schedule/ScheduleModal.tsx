@@ -1,10 +1,10 @@
 // @ts-nocheck
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, CalendarPlus, Clock, Mail, Trash2, ArrowRight, Edit2, Save, History, User as UserIcon, Calendar, Power } from 'lucide-react';
+import { X, CalendarPlus, Clock, Mail, Trash2, ArrowRight, Edit2, Save, History, User as UserIcon, Calendar, Power, FileText } from 'lucide-react';
 import { useToast } from '../ui/Toast';
 import ConfirmModal from '../ui/ConfirmModal';
-import { getMeetingHistory } from '../../services/authService';
+import { getMeetingHistory, getToken } from '../../services/authService';
 import { io as socketIO } from 'socket.io-client';
 
 interface ScheduleModalProps {
@@ -16,7 +16,10 @@ interface ScheduleModalProps {
 
 const ScheduleModal: React.FC<ScheduleModalProps> = ({ isOpen, onClose, user, onDirectJoin }) => {
     const { showToast } = useToast();
-    const [activeTab, setActiveTab] = useState<'schedule' | 'history'>('schedule');
+    const [activeTab, setActiveTab] = useState<'schedule' | 'history' | 'meeting-content'>('schedule');
+    const [meetingContents, setMeetingContents] = useState<any[]>([]);
+    const [contentLoading, setContentLoading] = useState(false);
+    const [deleteContentId, setDeleteContentId] = useState<string | null>(null);
 
     // ---- SCHEDULE TAB STATE ----
     const [loading, setLoading] = useState(false);
@@ -50,6 +53,68 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({ isOpen, onClose, user, on
         } finally {
             setDeleteConfirmId(null);
             setOverdueConfirmId(null);
+        }
+    };
+
+    const handleDeleteMeetingContent = async (id: string) => {
+        try {
+            const token = getToken();
+            if (!token) throw new Error('Authentication token missing');
+
+            const res = await fetch(`/api/meetings/content/${id}`, {
+                method: 'DELETE',
+                headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }
+            });
+            if (!res.ok) {
+                let errorMessage = `Failed to delete meeting content (${res.status})`;
+                try {
+                    const errJson = await res.json();
+                    errorMessage = errJson?.error || errorMessage;
+                } catch (_) {
+                    const errText = await res.text();
+                    if (errText) errorMessage = errText;
+                }
+                throw new Error(errorMessage);
+            }
+            showToast('Meeting content deleted', 'success');
+            setMeetingContents(prev => prev.filter(c => c._id !== id));
+        } catch (e: any) {
+            const message = e?.message || 'Error deleting meeting content';
+            showToast(message, 'error');
+            console.error('[MeetingContent] delete error', e);
+        } finally {
+            setDeleteContentId(null);
+        }
+    };
+
+    const handleRetryMeetingContent = async (id: string) => {
+        try {
+            const token = getToken();
+            if (!token) throw new Error('Authentication token missing');
+
+            const res = await fetch(`/api/meetings/content/${id}/retry`, {
+                method: 'POST',
+                headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }
+            });
+
+            let payload: any = null;
+            const contentType = res.headers.get('content-type') || '';
+            if (contentType.includes('application/json')) {
+                payload = await res.json();
+            } else {
+                payload = { message: await res.text() };
+            }
+
+            if (!res.ok) {
+                const message = payload?.error || payload?.message || `Failed to retry meeting content (${res.status})`;
+                throw new Error(message);
+            }
+
+            showToast('Retry started. Wait a moment and refresh the tab.', 'success');
+            handleFetchMeetingContents();
+        } catch (e: any) {
+            showToast(e?.message || 'Error retrying meeting content', 'error');
+            console.error('[MeetingContent] retry error', e);
         }
     };
 
@@ -116,6 +181,31 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({ isOpen, onClose, user, on
         } finally { setHistLoading(false); }
     };
 
+    const handleFetchMeetingContents = async () => {
+        if (!user?.id) return;
+        setContentLoading(true);
+        try {
+            const token = getToken();
+            if (!token) {
+                showToast('Bạn cần đăng nhập để xem nội dung họp', 'error');
+                return;
+            }
+            const res = await fetch(`/api/meetings/content/${user.id}`, {
+                headers: {
+                    Accept: 'application/json',
+                    Authorization: `Bearer ${token}`
+                }
+            });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error || 'Failed to load meeting content');
+            setMeetingContents(Array.isArray(data) ? data : []);
+        } catch (e: any) {
+            showToast(e.message || 'Error loading meeting content', 'error');
+        } finally {
+            setContentLoading(false);
+        }
+    };
+
     const handleCloseRoom = async (roomId: string) => {
         setClosingRoomId(roomId);
         try {
@@ -156,6 +246,9 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({ isOpen, onClose, user, on
     useEffect(() => {
         if (isOpen && activeTab === 'history') {
             handleFetchHistory();
+        }
+        if (isOpen && activeTab === 'meeting-content') {
+            handleFetchMeetingContents();
         }
     }, [activeTab, isOpen]);
 
@@ -203,6 +296,15 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({ isOpen, onClose, user, on
                                 : 'border-transparent text-slate-500 hover:text-slate-300'}`}
                         >
                             <History size={15} /> Meeting History
+                        </button>
+                        <button
+                            onClick={() => setActiveTab('meeting-content')}
+                            className={`flex items-center gap-1.5 px-4 py-2.5 text-sm font-semibold rounded-t-lg transition-all border-b-2 ${activeTab === 'meeting-content'
+                                ? 'border-emerald-500 text-emerald-400 bg-slate-900/60'
+                                : 'border-transparent text-slate-500 hover:text-slate-300'}`}
+                        >
+                            <FileText size={15} /> Meeting Content
+                            <span className="text-[10px] bg-emerald-500/20 text-emerald-400 px-1.5 rounded-full border border-emerald-500/30 ml-0.5">{meetingContents.length}</span>
                         </button>
                     </div>
 
@@ -391,6 +493,56 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({ isOpen, onClose, user, on
                                 </div>
                             )
                         )}
+
+                        {/* ---- MEETING CONTENT TAB ---- */}
+                        {activeTab === 'meeting-content' && (
+                            contentLoading && meetingContents.length === 0 ? (
+                                <div className="flex flex-col items-center justify-center py-16 gap-3">
+                                    <div className="w-8 h-8 border-4 border-emerald-500 border-t-transparent animate-spin rounded-full" />
+                                    <p className="text-slate-500 text-sm">Loading meeting contents...</p>
+                                </div>
+                            ) : meetingContents.length === 0 ? (
+                                <div className="text-center py-20 bg-slate-900/30 rounded-2xl border border-dashed border-slate-800/50">
+                                    <FileText size={56} className="mx-auto text-slate-800 mb-4 opacity-20" />
+                                    <p className="text-slate-400 font-medium">No meeting content yet</p>
+                                    <p className="text-slate-600 text-xs mt-1">Record a meeting to see summaries and transcripts here.</p>
+                                </div>
+                            ) : (
+                                <div className="space-y-3">
+                                    {meetingContents.map((c) => {
+                                        const statusLabel = c.status === 'completed' ? 'Completed' : c.status === 'processing' ? 'Processing…' : c.status === 'failed' ? 'Failed' : 'Pending';
+                                        const summaryText = c.status === 'failed' ? 'Processing failed. Please try uploading again.' : (c.summaryText || 'No summary yet. Processing...');
+
+                                        return (
+                                            <div key={c._id} className="bg-slate-900 border p-4 rounded-2xl border-emerald-500/30">
+                                                <div className="flex items-start justify-between gap-2">
+                                                    <div>
+                                                        <h4 className="text-white font-bold text-sm">{c.title || 'Untitled meeting content'}</h4>
+                                                        <p className="text-slate-400 text-xs mt-1">{new Date(c.createdAt).toLocaleString()}</p>
+                                                    </div>
+                                                    <span className={`text-xs px-2 py-1 rounded-full ${c.status === 'completed' ? 'bg-emerald-500/20 text-emerald-300' : c.status === 'failed' ? 'bg-red-500/20 text-red-300' : 'bg-slate-700/60 text-slate-300'}`}>{statusLabel}</span>
+                                                </div>
+                                                <div 
+                                                    className="mt-3 text-slate-300 text-sm line-clamp-3"
+                                                    dangerouslySetInnerHTML={{ __html: summaryText.replace(/\n/g, '<br />') }}
+                                                />
+                                        {c.status === 'failed' && c.errorMessage && (
+                                            <div className="mt-2 text-xs text-red-300 bg-red-950/20 p-2 rounded-lg border border-red-500/40">
+                                                Lỗi: {c.errorMessage}
+                                            </div>
+                                        )}
+                                                <div className="mt-4 flex gap-2 flex-wrap">
+                                                    {c.summaryDocxUrl && <a href={c.summaryDocxUrl} target="_blank" rel="noreferrer" className="px-3 py-1.5 rounded-lg bg-fuchsia-600 hover:bg-fuchsia-500 text-white text-xs font-semibold">Download Summary (.docx)</a>}
+                                                    {c.transcriptDocxUrl && <a href={c.transcriptDocxUrl} target="_blank" rel="noreferrer" className="px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold">Download Transcript (.docx)</a>}
+                                                    {c.status === 'failed' && <button onClick={() => handleRetryMeetingContent(c._id)} className="px-3 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-white text-xs font-semibold">Retry Processing</button>}
+                                                    <button onClick={() => setDeleteContentId(c._id)} className="px-3 py-1.5 rounded-lg bg-red-600 hover:bg-red-500 text-white text-xs font-semibold">Delete</button>
+                                                </div>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            )
+                        )}
                     </div>
                 </motion.div>
 
@@ -403,6 +555,17 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({ isOpen, onClose, user, on
                     type="danger"
                     onConfirm={() => deleteConfirmId && handleDeleteSchedule(deleteConfirmId)}
                     onCancel={() => setDeleteConfirmId(null)}
+                />
+
+                <ConfirmModal
+                    isOpen={!!deleteContentId}
+                    title="Delete Meeting Content"
+                    message="Are you sure you want to delete this meeting content and all associated files?"
+                    confirmText="Delete"
+                    cancelText="Cancel"
+                    type="danger"
+                    onConfirm={() => deleteContentId && handleDeleteMeetingContent(deleteContentId)}
+                    onCancel={() => setDeleteContentId(null)}
                 />
 
                 <ConfirmModal

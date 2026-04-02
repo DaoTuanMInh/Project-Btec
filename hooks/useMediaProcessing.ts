@@ -9,6 +9,7 @@ interface UseMediaProcessingProps {
     roomId: string;
     pcRef: React.MutableRefObject<Record<string, RTCPeerConnection>>;
     setPeers: React.Dispatch<React.SetStateAction<PeerStream[]>>;
+    currentVideoTrackRef: React.MutableRefObject<MediaStreamTrack | null>;
     settings: any;
 }
 
@@ -18,6 +19,7 @@ export const useMediaProcessing = ({
     roomId,
     pcRef,
     setPeers,
+    currentVideoTrackRef,
     settings
 }: UseMediaProcessingProps) => {
     const { showToast } = useToast();
@@ -42,6 +44,7 @@ export const useMediaProcessing = ({
         // 2. Update Remote Sendings
         const videoTrack = stream.getVideoTracks()[0];
         if (videoTrack) {
+            currentVideoTrackRef.current = videoTrack;
             Object.values(pcRef.current).forEach(pc => {
                 const sender = pc.getSenders().find(s => s.track?.kind === 'video');
                 if (sender) {
@@ -49,7 +52,7 @@ export const useMediaProcessing = ({
                 }
             });
         }
-    }, [setPeers, pcRef, user.id, roomId]);
+    }, [setPeers, pcRef, user.id, roomId, currentVideoTrackRef]);
 
     // Effect to handle Blur Logic
     useEffect(() => {
@@ -98,7 +101,10 @@ export const useMediaProcessing = ({
             startBlur();
         } else {
             stopBlur();
-            updateStreamForPeers(localStream);
+            // Only revert to localStream if we're not currently screen sharing
+            if (!isScreenSharing) {
+                updateStreamForPeers(localStream);
+            }
         }
 
         return () => stopBlur();

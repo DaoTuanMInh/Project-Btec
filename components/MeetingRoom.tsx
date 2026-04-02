@@ -7,7 +7,7 @@ import Sidebar from './room/Sidebar';
 import MeetingSettingsModal from './room/MeetingSettingsModal';
 import WaitRoom from './room/WaitRoom';
 import ReactionFloating from './room/ReactionFloating';
-import { Settings, Mic, MicOff, Video, VideoOff, MonitorUp, PhoneOff, MessageSquare, Smile, Copy, Eye, EyeOff, Users, Lock } from 'lucide-react';
+import { Settings, Mic, MicOff, Video, VideoOff, MonitorUp, PhoneOff, MessageSquare, Smile, Copy, Eye, EyeOff, Users, Lock, Circle, StopCircle, FileText } from 'lucide-react';
 import ConfirmModal from './ui/ConfirmModal';
 
 // --- IMPORT HOOKS ---
@@ -30,6 +30,7 @@ const MeetingRoom: React.FC<Props> = ({ user, roomId, localStream, onLeave, sett
   const transcriptRef = useRef<string[]>([]);
   const dataChannelsRef = useRef<Record<string, RTCDataChannel>>({}); // E2EE Chat
   const processedMsgIdsRef = useRef(new Set<string>()); // Anti-spam/dedup tracking
+  const currentVideoTrackRef = useRef<MediaStreamTrack | null>(localStream.getVideoTracks()[0]);
 
   // 2. WebRTC Core
   const rtc = useWebRTC({
@@ -40,7 +41,8 @@ const MeetingRoom: React.FC<Props> = ({ user, roomId, localStream, onLeave, sett
     transcriptRef,
     isSidebarOpenRef: state.isSidebarOpenRef,
     activeTabRef: state.activeTabRef,
-    processedMsgIdsRef
+    processedMsgIdsRef,
+    currentVideoTrackRef
   });
 
   // NOTE: Connecting dataChannelsRef manually since it was tricky to extract fully without circular deps
@@ -48,7 +50,7 @@ const MeetingRoom: React.FC<Props> = ({ user, roomId, localStream, onLeave, sett
 
   // 3. Media Processing
   const media = useMediaProcessing({
-    localStream, user, roomId, pcRef: rtc.pcRef, setPeers: state.setPeers, settings: state.roomSettings
+    localStream, user, roomId, pcRef: rtc.pcRef, setPeers: state.setPeers, currentVideoTrackRef, settings: state.roomSettings
   });
 
   // Local State Wrappers for Signaling
@@ -56,6 +58,17 @@ const MeetingRoom: React.FC<Props> = ({ user, roomId, localStream, onLeave, sett
   const [isVideoOff, setIsVideoOff] = React.useState(!localStream.getVideoTracks()[0]?.enabled);
   const isMutedRef = useRef(!localStream.getAudioTracks()[0]?.enabled);
   const isVideoOffRef = useRef(!localStream.getVideoTracks()[0]?.enabled);
+
+  // Recording state
+  const [isRecording, setIsRecording] = React.useState(false);
+  const [recordingLabel, setRecordingLabel] = React.useState('Ready');
+  const [recordedBlobs, setRecordedBlobs] = React.useState<Blob[]>([]);
+  const [recordingName, setRecordingName] = React.useState('');
+  const [showRecordingNameInput, setShowRecordingNameInput] = React.useState(false);
+  const [stopConfirming, setStopConfirming] = React.useState(false);
+  const [roomCloseAfterSave, setRoomCloseAfterSave] = React.useState(false);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const targetFileNameRef = useRef<string>(`meeting-${Date.now()}`);
 
   // --- STRICT STATE SYNCHRONIZATION ---
   useEffect(() => {
@@ -72,6 +85,56 @@ const MeetingRoom: React.FC<Props> = ({ user, roomId, localStream, onLeave, sett
 
 
   // 4. Mute/Video logic
+  // Speech Recognition Live Transcription
+  useEffect(() => {
+    if (!state.isVerified || isMuted) return; // Only transcribe if mic is on
+
+    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SpeechRecognition) return;
+
+    let recognition: any;
+    try {
+        recognition = new SpeechRecognition();
+    } catch(e) { return; }
+    
+    recognition.continuous = true;
+    recognition.interimResults = false;
+    const currentLang = state.roomSettings.transcriptionLang || 'vi-VN';
+    recognition.lang = currentLang === 'auto' ? 'vi-VN' : currentLang;
+
+    let isManuallyStopped = false;
+
+    recognition.onresult = (event: any) => {
+      const lastIndex = event.results.length - 1;
+      const text = event.results[lastIndex][0].transcript.trim();
+      if (text) {
+        // Send to others
+        signaling.send('transcript-chunk', user.id, undefined, roomId, { text, userName: user.name });
+        // Save locally for the host recording it
+        if (transcriptRef.current) transcriptRef.current.push(`${user.name}: ${text}`);
+      }
+    };
+
+    recognition.onerror = (e: any) => {
+      if (e.error === 'not-allowed' || e.error === 'audio-capture') {
+          isManuallyStopped = true;
+      }
+    };
+    
+    recognition.onend = () => {
+      if (!isManuallyStopped) {
+         try { recognition.start(); } catch(e){}
+      }
+    };
+
+    try { recognition.start(); } catch(e){}
+
+    return () => {
+      isManuallyStopped = true;
+      recognition.stop();
+    };
+  }, [state.isVerified, isMuted, roomId, user.id, user.name]);
+
   const toggleMute = useCallback((force = false) => {
     if (!force && state.roomSettingsRef.current?.requireMic && !isMutedRef.current) {
       state.showToast("The room settings require Mic to be turned on!", 'warning'); return;
@@ -79,9 +142,9 @@ const MeetingRoom: React.FC<Props> = ({ user, roomId, localStream, onLeave, sett
     const newVal = !isMutedRef.current;
     localStream.getAudioTracks().forEach(t => t.enabled = !newVal);
     setIsMuted(newVal); isMutedRef.current = newVal;
-    state.setPeers(prev => prev.map(p => p.isLocal ? { ...p, muted: newVal } : p));
-    signaling.send('user-update', user.id, undefined, roomId, { muted: newVal });
-  }, [roomId, user.id, localStream, state]);
+    state.setPeers(prev => prev.map(p => p.isLocal ? { ...p, muted: newVal, isScreenShare: media.isScreenSharing } : p));
+    signaling.send('user-update', user.id, undefined, roomId, { muted: newVal, isScreenShare: media.isScreenSharing });
+  }, [roomId, user.id, localStream, state, media.isScreenSharing]);
 
   const toggleVideo = useCallback((force = false) => {
     if (!force && state.roomSettingsRef.current?.requireCamera && !isVideoOffRef.current) {
@@ -90,9 +153,189 @@ const MeetingRoom: React.FC<Props> = ({ user, roomId, localStream, onLeave, sett
     const newVal = !isVideoOffRef.current;
     localStream.getVideoTracks().forEach(t => t.enabled = !newVal);
     setIsVideoOff(newVal); isVideoOffRef.current = newVal;
-    state.setPeers(prev => prev.map(p => p.isLocal ? { ...p, videoOff: newVal } : p));
-    signaling.send('user-update', user.id, undefined, roomId, { videoOff: newVal });
-  }, [roomId, user.id, localStream, state]);
+    state.setPeers(prev => prev.map(p => p.isLocal ? { ...p, videoOff: newVal, isScreenShare: media.isScreenSharing } : p));
+    signaling.send('user-update', user.id, undefined, roomId, { videoOff: newVal, isScreenShare: media.isScreenSharing });
+  }, [roomId, user.id, localStream, state, media.isScreenSharing]);
+
+  const chooseSupportedMimeType = () => {
+    const candidates = [
+      'audio/webm;codecs=opus',
+      'audio/webm',
+      'audio/ogg;codecs=opus',
+      'audio/ogg',
+      'audio/wav'
+    ];
+    for (const mimeType of candidates) {
+      if (MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported(mimeType)) {
+        return mimeType;
+      }
+    }
+    return '';
+  };
+
+  const startRecordingWithName = async (filename: string) => {
+    if (!state.isCurrentUserHost) {
+      state.showToast('Only host can start recording.', 'warning');
+      return;
+    }
+    if (isRecording) return;
+    if (!localStream || !localStream.getAudioTracks().length) {
+      state.showToast('No local audio track found. Please enable microphone.', 'error');
+      return;
+    }
+
+    if (typeof MediaRecorder === 'undefined') {
+      state.showToast('MediaRecorder is not supported in your browser', 'error');
+      return;
+    }
+
+    const chosenMimeType = chooseSupportedMimeType();
+    if (!chosenMimeType) {
+      state.showToast('No supported audio MIME type for MediaRecorder, please use Chrome/Edge/Firefox latest', 'error');
+      return;
+    }
+
+    // We allow starting with a temporary name; final name can be set after stop
+    const normalizedName = filename.trim() || `meeting-${Date.now()}`;
+    targetFileNameRef.current = normalizedName;
+    setRecordingName(normalizedName);
+
+
+    // Ensure audio track is active and create a dedicated audio stream for recording
+    const audioTracks = localStream.getAudioTracks();
+    const activeTrack = audioTracks.find(track => track.kind === 'audio' && track.enabled && track.readyState === 'live');
+
+    if (!activeTrack) {
+      state.showToast('Could not start recording: no active audio track found. Please enable microphone and permissions.', 'error');
+      return;
+    }
+
+    const recordingStream = new MediaStream([activeTrack]);
+    const options: any = { mimeType: chosenMimeType, audioBitsPerSecond: 128000 };
+    let recorder: MediaRecorder | null = null;
+
+    const createRecorder = async () => {
+      try {
+        console.log('[Recording] Attempting MediaRecorder on tracking stream with mimeType:', chosenMimeType);
+        return new MediaRecorder(recordingStream, options);
+      } catch (primaryErr) {
+        console.warn('[Recording] Primary MediaRecorder failed', primaryErr);
+        try {
+          const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
+          const sourceNode = audioCtx.createMediaStreamSource(localStream);
+          const destination = audioCtx.createMediaStreamDestination();
+          sourceNode.connect(destination);
+          console.log('[Recording] Fallback MediaRecorder with AudioContext destination stream.');
+          return new MediaRecorder(destination.stream, options);
+        } catch (fallbackErr) {
+          console.error('[Recording] Fallback MediaRecorder failed', fallbackErr);
+          throw fallbackErr;
+        }
+      }
+    };
+
+    try {
+      recorder = await createRecorder();
+      console.log('[Recording] MediaRecorder created, stream tracks:', recordingStream.getTracks().map(t => ({ kind: t.kind, enabled: t.enabled, readyState: t.readyState })));
+      recorder.onerror = (event: any) => {
+        console.error('MediaRecorder onerror', event);
+        const errMsg = event.error?.message || 'Unknown MediaRecorder error';
+        state.showToast(`Could not start recording: ${errMsg}. Please check your microphone and permissions.`, 'error');
+      };
+
+      mediaRecorderRef.current = recorder;
+      setRecordedBlobs([]);
+      setRecordingLabel('Recording...');
+
+      const chunks: Blob[] = [];
+      recorder.ondataavailable = (event: BlobEvent) => {
+        if (event.data && event.data.size > 0) {
+          chunks.push(event.data);
+          setRecordedBlobs(prev => [...prev, event.data]);
+        }
+      };
+
+        recorder.onstop = async () => {
+        setIsRecording(false);
+        setRecordingLabel('Uploading final recording...');
+
+        const blob = new Blob(chunks, { type: 'audio/webm' });
+        await uploadRecordedBlob(blob, targetFileNameRef.current);
+
+        if (roomCloseAfterSave) {
+          setRoomCloseAfterSave(false);
+          signaling.send('leave', user.id, undefined, roomId, {});
+          onLeave();
+        }
+      };
+
+      recorder.start(5000); // Emit chunks every 5 seconds
+      setIsRecording(true);
+      state.showToast('Recording started.', 'success');
+    } catch (err: any) {
+      console.error('Recording error', err);
+      const message = err?.message || 'Unknown error';
+      state.showToast(`Could not start recording: ${message}. Please check your microphone and permissions.`, 'error');
+      setRecordingLabel('Failed');
+    }
+  };
+
+  const handleStartRecording = () => {
+    const tempName = `meeting-${Date.now()}`;
+    targetFileNameRef.current = tempName;
+    setRecordingName(tempName);
+    startRecordingWithName(tempName);
+  };
+
+  const handleStopRecording = () => {
+    if (!isRecording || !mediaRecorderRef.current) return;
+
+    setStopConfirming(true);
+    setShowRecordingNameInput(true);
+    setRecordingLabel('Enter filename to save, or Cancel to continue recording');
+  };
+
+  const handleLeaveRoom = () => {
+    if (isRecording) {
+      setRoomCloseAfterSave(true);
+      setStopConfirming(true);
+      setShowRecordingNameInput(true);
+      setRecordingLabel('Enter filename to save before leaving room');
+      return;
+    }
+    signaling.send('leave', user.id, undefined, roomId, {});
+    onLeave();
+  };
+
+  const uploadRecordedBlob = async (blob: Blob, filename: string) => {
+    setRecordingLabel('Processing...');
+    const formData = new FormData();
+    formData.append('audio', blob, `${filename}.webm`);
+    formData.append('roomId', roomId);
+    formData.append('hostId', user.id);
+    formData.append('name', filename);
+    const names = Array.from(new Set(state.peers.map(p => p.userName))).filter(Boolean).join(', ');
+    if (names) formData.append('participants', names);
+
+    if (state.roomSettings.transcriptionLang !== 'auto' && transcriptRef.current && transcriptRef.current.length > 0) {
+        formData.append('rawTranscript', transcriptRef.current.join('\n'));
+    }
+
+    try {
+      const token = localStorage.getItem('avo_auth_token') || sessionStorage.getItem('avo_auth_token');
+      const res = await fetch(`/api/meetings/${roomId}/record`, { method: 'POST', body: formData, headers: token ? { Authorization: `Bearer ${token}` } : {} });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Record upload failed');
+      state.showToast('Recording uploaded successfully. Sending to AI summarizer...', 'success');
+      setRecordingLabel('Uploaded, waiting summary');
+    } catch (err: any) {
+      console.error(err);
+      state.showToast(`Audio upload failed: ${err.message || err}`, 'error');
+      setRecordingLabel('Failed');
+    } finally {
+      setRecordingLabel('Ready');
+    }
+  };
 
 
   // 2. Verified Entry Sync (Run ONCE when isVerified becomes true)
@@ -256,12 +499,14 @@ const MeetingRoom: React.FC<Props> = ({ user, roomId, localStream, onLeave, sett
       const existingMe = prev.find(p => p.isLocal);
       const me = {
         userId: user.id,
-        stream: media.isBlurred && media.canvasRef.current ? (media.sourceVideoRef.current as any)?.srcObject : localStream,
+        stream: media.isScreenSharing && media.isScreenSharing ? (state.peers.find(p => p.isLocal)?.stream || localStream) : 
+                (media.isBlurred && media.canvasRef.current ? (media.sourceVideoRef.current as any)?.srcObject : localStream),
         userName: user.name,
         isLocal: true,
         muted: isMuted,
         videoOff: isVideoOff,
-        avatar: user.avatar
+        avatar: user.avatar,
+        isScreenShare: media.isScreenSharing
       };
 
       if (!existingMe) {
@@ -272,7 +517,7 @@ const MeetingRoom: React.FC<Props> = ({ user, roomId, localStream, onLeave, sett
       // Update local state in peer list
       return prev.map(p => p.isLocal ? me : p);
     });
-  }, [user.id, user.name, user.avatar, isMuted, isVideoOff, localStream]);
+  }, [user.id, user.name, user.avatar, isMuted, isVideoOff, localStream, media.isScreenSharing]);
 
   // Handle Chat Unread Count
   useEffect(() => {
@@ -363,7 +608,11 @@ const MeetingRoom: React.FC<Props> = ({ user, roomId, localStream, onLeave, sett
         {/* CONTROLS */}
         <div onClick={e => e.stopPropagation()} className={`fixed bottom-6 left-0 right-0 z-50 flex flex-col items-center gap-4 transition-all px-4 ${!state.showControls ? 'translate-y-[150%]' : ''}`}>
 
-          {/* Reaction Menu */}
+          {/* Recording dot (top corner) */}
+          {isRecording && (
+            <div className="fixed top-4 right-4 z-60 w-3 h-3 rounded-full bg-red-500 animate-pulse border-2 border-white/60 shadow-[0_0_10px_rgba(255,0,0,0.7)]" />
+          )}
+
           <div className={`transition-all duration-300 ease-out origin-bottom ${state.isReactionMenuOpen ? 'opacity-100 scale-100 translate-y-0 pointer-events-auto' : 'opacity-0 scale-90 translate-y-4 pointer-events-none'}`}>
             <div className="bg-slate-800 p-2 md:p-3 rounded-full flex gap-2 md:gap-3 shadow-[0_0_30px_rgba(0,0,0,0.5)] border border-white/10 backdrop-blur-xl mb-2">
               {['❤️', '👍', '😂', '😮', '👏', '🎉'].map((e, i) => (
@@ -387,6 +636,9 @@ const MeetingRoom: React.FC<Props> = ({ user, roomId, localStream, onLeave, sett
             <button onClick={() => toggleMute()} className={`w-10 h-10 md:w-12 md:h-12 shrink-0 rounded-full flex items-center justify-center transition-colors ${isMuted ? 'bg-red-500 text-white' : 'bg-slate-800 text-slate-200 hover:bg-slate-700'}`}>{isMuted ? <MicOff size={20} /> : <Mic size={20} />}</button>
             <button onClick={() => toggleVideo()} className={`w-10 h-10 md:w-12 md:h-12 shrink-0 rounded-full flex items-center justify-center transition-colors ${isVideoOff ? 'bg-red-500 text-white' : 'bg-slate-800 text-slate-200 hover:bg-slate-700'}`}>{isVideoOff ? <VideoOff size={20} /> : <Video size={20} />}</button>
             <button onClick={() => media.setIsBlurred(!media.isBlurred)} className={`w-10 h-10 md:w-12 md:h-12 shrink-0 rounded-full flex items-center justify-center transition-colors ${media.isBlurred ? 'bg-emerald-600 text-white' : 'bg-slate-800 text-slate-200 hover:bg-slate-700'}`}>{media.isBlurred ? <EyeOff size={20} /> : <Eye size={20} />}</button>
+            <button onClick={() => isRecording ? handleStopRecording() : handleStartRecording()} className={`w-10 h-10 md:w-12 md:h-12 shrink-0 rounded-full flex items-center justify-center transition-colors ${isRecording ? 'bg-red-600 text-white animate-pulse' : 'bg-slate-800 text-slate-200 hover:bg-slate-700'}`} title={isRecording ? 'Stop Recording' : 'Start Recording'}>
+              {isRecording ? <StopCircle size={20} /> : <Circle size={20} />}
+            </button>
             <button onClick={media.shareScreen} className={`hidden md:flex w-12 h-12 shrink-0 rounded-full items-center justify-center transition-colors ${media.isScreenSharing ? 'bg-blue-600' : 'bg-slate-800 hover:bg-slate-700'}`}><MonitorUp size={20} /></button>
 
             {state.roomSettings.allowReactions && (
@@ -407,9 +659,53 @@ const MeetingRoom: React.FC<Props> = ({ user, roomId, localStream, onLeave, sett
             }} className={`w-10 h-10 md:w-12 md:h-12 shrink-0 rounded-full flex items-center justify-center relative transition-colors ${state.isSidebarOpen && state.activeTab === 'chat' ? 'bg-blue-600 text-white' : 'bg-slate-800 text-slate-200 hover:bg-slate-700'}`}><MessageSquare size={20} />
               {state.unreadCount > 0 && <span className="absolute -top-1 -right-1 w-4 h-4 bg-red-600 rounded-full text-[10px] text-white flex items-center justify-center border border-slate-900">{state.unreadCount}</span>}
             </button>
-            <button onClick={() => { signaling.send('leave', user.id, undefined, roomId, {}); onLeave(); }} className="px-5 md:px-6 h-10 md:h-12 shrink-0 bg-red-600 hover:bg-red-500 text-white rounded-full font-bold flex items-center gap-2 transition-all active:scale-95"><PhoneOff size={20} /><span className="hidden md:inline">Leave</span></button>
+            <button onClick={handleLeaveRoom} className="px-5 md:px-6 h-10 md:h-12 shrink-0 bg-red-600 hover:bg-red-500 text-white rounded-full font-bold flex items-center gap-2 transition-all active:scale-95"><PhoneOff size={20} /><span className="hidden md:inline">Leave</span></button>
           </div>
         </div>
+
+        {showRecordingNameInput && (
+          <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
+            <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={() => {
+              setShowRecordingNameInput(false);
+              if (stopConfirming) {
+                setStopConfirming(false);
+                setRecordingLabel('Recording...');
+              }
+            }} />
+            <div className="relative w-full max-w-md bg-slate-900 border border-slate-700 rounded-2xl p-5 shadow-2xl z-10">
+              <h3 className="text-white text-lg font-bold mb-2">Enter summary filename</h3>
+              <p className="text-slate-400 text-sm mb-4">Nhập tên tóm tắt (ví dụ: Buoi-hop-1)</p>
+              <input
+                value={recordingName}
+                onChange={(e) => setRecordingName(e.target.value)}
+                className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-700 text-sm text-white focus:outline-none focus:border-indigo-500"
+                placeholder="example: Buoi-hop-1"
+              />
+              <div className="mt-4 flex justify-end gap-2">
+                <button onClick={() => {
+                  setShowRecordingNameInput(false);
+                  if (stopConfirming) {
+                    setStopConfirming(false);
+                    setRecordingLabel('Recording...');
+                  }
+                }} className="px-3 py-2 text-slate-300 hover:text-white bg-slate-700 rounded-lg">Cancel</button>
+                <button onClick={() => {
+                  const chosenName = recordingName.trim() || `meeting-${Date.now()}`;
+                  setShowRecordingNameInput(false);
+                  setStopConfirming(false);
+                  setRecordingName(chosenName);
+                  targetFileNameRef.current = chosenName;
+
+                  if (isRecording && mediaRecorderRef.current) {
+                    setRecordingLabel('Stopping and uploading...');
+                    mediaRecorderRef.current.stop();
+                  }
+                }} className="px-3 py-2 text-white bg-indigo-600 hover:bg-indigo-500 rounded-lg">Confirm</button>
+              </div>
+            </div>
+          </div>
+        )}
+
       </div>
 
       <Sidebar
