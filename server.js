@@ -173,11 +173,22 @@ const transcribeAudioFile = async (wavPath) => {
     return data.text || '';
 };
 
-const formatTranscriptWithSpeakers = async (rawText, participants) => {
+const formatTranscriptWithSpeakers = async (rawText, participants, isLive = false) => {
     if (!process.env.GROQ_API_KEY) return rawText;
     
     const contextStr = participants ? `Danh sách những người tham gia trong cuộc họp: ${participants}.\n` : '';
-    const prompt = `Bạn là một AI xử lý ngôn ngữ tự nhiên. Dưới đây là đoạn hội thoại chưa được phân định người nói:\n\n${rawText}\n\n${contextStr}Hãy phân tích và viết lại nó theo dạng kịch bản có tên người nói. Dựa vào cách họ xưng hô (ví dụ có gọi tên nhau Minh ơi, Long à...) hoặc từ giọng văn để nhận diện, hãy gán tên người nói ở đầu mỗi câu. Nếu không biết tên, có thể dùng "Người 1", "Người 2"...\nTuyệt đối chỉ trả về đoạn hội thoại đã xử lý với cấu trúc Tên: Lời nói, không thêm bất kỳ nhận xét, phân tích hay giới thiệu nào.\nVí dụ:\nMinh: bạn ơi\nLong: ơi mình đây`;
+    
+    let prompt = '';
+    if (isLive) {
+        // Dữ liệu đã có sẵn Tên: Lời nói từ máy tính
+        prompt = `Bạn là một AI xử lý ngôn ngữ tự nhiên. Dưới đây là biên bản cuộc họp đã có Tên người nói được ghi nhận trực tiếp:\n\n${rawText}\n\n${contextStr}Nhiệm vụ của bạn là:
+1. TUYỆT ĐỐI không thay đổi tên người nói. Giữ nguyên định dạng "Tên: Lời nói" ở đầu mỗi câu.
+2. Chỉ sửa lỗi chính tả, dấu câu và các từ bị nhận diện sai âm thanh cho đoạn văn trôi chảy hơn (ví dụ: "xin chào" thành "Xin chào").
+3. Không thêm bất kỳ nhận xét, phân tích hay giới thiệu nào.`;
+    } else {
+        // Dữ liệu thô chưa có tên -> Cần AI phân tích
+        prompt = `Bạn là một AI xử lý ngôn ngữ tự nhiên. Dưới đây là đoạn hội thoại chưa được phân định người nói:\n\n${rawText}\n\n${contextStr}Hãy phân tích và viết lại nó theo dạng kịch bản có tên người nói. Dựa vào cách họ xưng hô (ví dụ có gọi tên nhau Minh ơi, Long à...) hoặc từ giọng văn để nhận diện, hãy gán tên người nói ở đầu mỗi câu. Nếu không biết tên, có thể dùng "Người 1", "Người 2"...\nTuyệt đối chỉ trả về đoạn hội thoại đã xử lý với cấu trúc Tên: Lời nói, không thêm bất kỳ nhận xét, phân tích hay giới thiệu nào.\nVí dụ:\nMinh: bạn ơi\nLong: ơi mình đây`;
+    }
 
     try {
         const resp = await fetch('https://api.groq.com/openai/v1/chat/completions', {
@@ -311,11 +322,14 @@ const processMeetingQueue = async () => {
         console.log(`[MeetingContent Worker] Transcribing: ${contentId}`);
         let transcript = meetingContent.transcriptText;
         if (!transcript) {
-            const rawTranscript = await transcribeAudioFile(wavPath);
-            console.log(`[MeetingContent Worker] Identifying speakers: ${contentId}`);
-            transcript = await formatTranscriptWithSpeakers(rawTranscript, meetingContent.participants);
+            // Trường hợp 1: Không có bản ghi thô từ máy tính -> Dùng AI nhận diện từ Audio
+            const rawAudioText = await transcribeAudioFile(wavPath);
+            console.log(`[MeetingContent Worker] AI Identifying speakers from audio: ${contentId}`);
+            transcript = await formatTranscriptWithSpeakers(rawAudioText, meetingContent.participants, false);
         } else {
-            console.log(`[MeetingContent Worker] Using provided local transcript: ${contentId}`);
+            // Trường hợp 2: ĐÃ CÓ bản ghi tên thật từ máy tính -> Chỉ dùng AI để sửa lỗi chính tả/định dạng
+            console.log(`[MeetingContent Worker] Using local live transcript (Real Names): ${contentId}`);
+            transcript = await formatTranscriptWithSpeakers(transcript, meetingContent.participants, true);
         }
         
         console.log(`[MeetingContent Worker] Summarizing: ${contentId}`);
@@ -558,7 +572,6 @@ app.get('/api/download-file/:filename', async (req, res) => {
 });
 
 app.get('/api/meetings/content/:userId', verifyToken, async (req, res) => {
-    console.log(`[API] Get content for user: ${req.params.userId} (Auth: ${req.userId})`);
     if (req.userId !== req.params.userId) {
         return res.status(403).json({ error: 'Not allowed' });
     }

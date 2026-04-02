@@ -51,11 +51,11 @@ export const useSetupMedia = () => {
     // START CAMERA
     const startCamera = useCallback(async (manual = false) => {
         if (isStartingRef.current) return;
-
-        if (!manual && previewStreamRef.current?.active) return;
-
+        
+        // Remove the block that checks if previewStream is active 
+        // to ensure we can ALWAYS try to re-init if things get stuck.
+        
         isStartingRef.current = true;
-
         console.log(`[useSetupMedia] startCamera. Manual: ${manual}, Intent(Cam/Mic): ${isCameraOnRef.current}/${isMicOnRef.current}`);
 
         try {
@@ -63,7 +63,7 @@ export const useSetupMedia = () => {
                 previewStreamRef.current.getTracks().forEach(t => t.stop());
             }
 
-            console.log("Requesting camera access with noise suppression...");
+            console.log("Requesting camera access...");
             const stream = await navigator.mediaDevices.getUserMedia({
                 video: true,
                 audio: {
@@ -79,12 +79,7 @@ export const useSetupMedia = () => {
             const videoTrack = stream.getVideoTracks()[0];
             if (videoTrack) {
                 videoTrack.enabled = intentCamera;
-
                 if (manual && videoTrack.muted) showToastRef.current("Camera may be turned off by a physical key!", 'warning');
-
-                videoTrack.onended = () => {
-                    // Auto-restart logic disabled
-                };
             }
 
             const intentMic = isMicOnRef.current;
@@ -99,11 +94,14 @@ export const useSetupMedia = () => {
                 setIsCameraOn(true);
             }
 
-            // connectAudioSource(stream); // Removed
-
-        } catch (e) {
+        } catch (e: any) {
             console.warn("Could not get preview stream:", e);
-            if (manual) showToastRef.current("Could not turn on Camera. Check permissions!", 'error');
+            // Case-specific guidance
+            if (e.name === 'NotAllowedError' || e.name === 'PermissionDeniedError') {
+                showToastRef.current("Camera access denied. Please click the LOCK icon in the address bar and set Camera to 'Allow'.", 'error');
+            } else {
+                if (manual) showToastRef.current("Could not access Camera. Ensure no other apps are using it.", 'error');
+            }
         } finally {
             setTimeout(() => { isStartingRef.current = false; }, 1000);
         }

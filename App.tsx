@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { User, MeetingStatus, PeerStream, MeetingSettings } from './types';
 import SetupScreen from './components/setup/SetupScreen';
 import MeetingRoom from './components/MeetingRoom';
@@ -46,13 +46,30 @@ const App: React.FC = () => {
 
   // Explicitly Initialize Camera ONCE at App level
   // Only if Authenticated to avoid permission prompt on Login screen
+  const localStreamRef = useRef<MediaStream | null>(null);
+  const previewStreamRef = useRef<MediaStream | null>(null);
+
+  useEffect(() => {
+    localStreamRef.current = localStream;
+  }, [localStream]);
+
+  useEffect(() => {
+    previewStreamRef.current = setupMedia.previewStream;
+  }, [setupMedia.previewStream]);
+
   useEffect(() => {
     if (isAuthenticated) {
       console.log("[App] App Mounted - Initializing Camera Singleton");
       setupMedia.startCamera(false);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isAuthenticated]);
+
+    const handleUnload = () => {
+      if (localStreamRef.current) localStreamRef.current.getTracks().forEach(t => t.stop());
+      if (previewStreamRef.current) previewStreamRef.current.getTracks().forEach(t => t.stop());
+    };
+    window.addEventListener('beforeunload', handleUnload);
+    return () => window.removeEventListener('beforeunload', handleUnload);
+  }, [isAuthenticated]); // Only depend on Auth status, NOT localStream!
 
   // Restore Session on Load
   useEffect(() => {

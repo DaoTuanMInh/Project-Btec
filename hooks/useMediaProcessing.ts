@@ -32,6 +32,7 @@ export const useMediaProcessing = ({
     const sourceVideoRef = useRef<HTMLVideoElement>(null);
     const rafRef = useRef<number | null>(null);
     const processedStreamRef = useRef<MediaStream | null>(null);
+    const screenStreamRef = useRef<MediaStream | null>(null);
 
     // Helper to update peers with new stream track
     const updateStreamForPeers = useCallback((stream: MediaStream, isScreenShareUpdate = false) => {
@@ -53,6 +54,17 @@ export const useMediaProcessing = ({
             });
         }
     }, [setPeers, pcRef, user.id, roomId, currentVideoTrackRef]);
+
+    // Cleanup Screen Share on Unmount
+    useEffect(() => {
+        return () => {
+            if (screenStreamRef.current) {
+                console.log("[useMediaProcessing] Cleaning up screen share on unmount");
+                screenStreamRef.current.getTracks().forEach(t => t.stop());
+                screenStreamRef.current = null;
+            }
+        };
+    }, []);
 
     // Effect to handle Blur Logic
     useEffect(() => {
@@ -108,11 +120,17 @@ export const useMediaProcessing = ({
         }
 
         return () => stopBlur();
-    }, [isBlurred, localStream, updateStreamForPeers]);
+    }, [isBlurred, localStream, updateStreamForPeers, isScreenSharing]);
 
     const stopScreenShare = () => {
         // Revert to Local Camera Stream
         console.log("Stopping Screen Share - Reverting to Camera");
+        
+        if (screenStreamRef.current) {
+            screenStreamRef.current.getTracks().forEach(t => t.stop());
+            screenStreamRef.current = null;
+        }
+
         if (localStream && localStream.getVideoTracks().length > 0) {
             updateStreamForPeers(localStream, false);
         } else {
@@ -140,6 +158,7 @@ export const useMediaProcessing = ({
 
         try {
             const screenStream = await navigator.mediaDevices.getDisplayMedia({ video: true });
+            screenStreamRef.current = screenStream;
             const videoTrack = screenStream.getVideoTracks()[0];
 
             // Update with Screen Stream
@@ -163,7 +182,9 @@ export const useMediaProcessing = ({
         isScreenSharing,
         isBlurred, setIsBlurred,
         shareScreen,
+        stopScreenShare, 
         canvasRef,
         sourceVideoRef
     };
+
 };

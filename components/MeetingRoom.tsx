@@ -317,7 +317,8 @@ const MeetingRoom: React.FC<Props> = ({ user, roomId, localStream, onLeave, sett
     const names = Array.from(new Set(state.peers.map(p => p.userName))).filter(Boolean).join(', ');
     if (names) formData.append('participants', names);
 
-    if (state.roomSettings.transcriptionLang !== 'auto' && transcriptRef.current && transcriptRef.current.length > 0) {
+    // Always send the local transcript if we have it (Speaker names are already included here)
+    if (transcriptRef.current && transcriptRef.current.length > 0) {
         formData.append('rawTranscript', transcriptRef.current.join('\n'));
     }
 

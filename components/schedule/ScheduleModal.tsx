@@ -187,7 +187,7 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({ isOpen, onClose, user, on
         try {
             const token = getToken();
             if (!token) {
-                showToast('Bạn cần đăng nhập để xem nội dung họp', 'error');
+                showToast('You must be logged in to view meeting content', 'error');
                 return;
             }
             const res = await fetch(`/api/meetings/content/${user.id}`, {
@@ -528,7 +528,7 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({ isOpen, onClose, user, on
                                                 />
                                         {c.status === 'failed' && c.errorMessage && (
                                             <div className="mt-2 text-xs text-red-300 bg-red-950/20 p-2 rounded-lg border border-red-500/40">
-                                                Lỗi: {c.errorMessage}
+                                                Error: {c.errorMessage}
                                             </div>
                                         )}
                                                 <div className="mt-4 flex gap-2 flex-wrap">
