@@ -558,6 +558,7 @@ app.get('/api/download-file/:filename', async (req, res) => {
 });
 
 app.get('/api/meetings/content/:userId', verifyToken, async (req, res) => {
+    console.log(`[API] Get content for user: ${req.params.userId} (Auth: ${req.userId})`);
     if (req.userId !== req.params.userId) {
         return res.status(403).json({ error: 'Not allowed' });
     }
@@ -852,14 +853,6 @@ app.get('/api/chat/history/:roomId', async (req, res) => {
         res.json(decryptedMessages);
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
-// --- CATCH-ALL FOR REACT ROUTER ---
-app.get('*', (req, res) => {
-    // If request is for an API that doesn't exist, don't return HTML
-    if (req.path.startsWith('/api/')) {
-        return res.status(404).json({ error: 'API route not found' });
-    }
-    res.sendFile(path.join(distPath, 'index.html'));
-});
 
 // --- SOCKET.IO LOGIC ---
 const socketMap = {};
@@ -1084,8 +1077,12 @@ io.on('connection', (socket) => {
     });
 });
 
-// SPA Fallback (Sử dụng regex /(.*)/ để hỗ trợ refresh trang trên toàn bộ ứng dụng trên Express 5)
+// SPA Fallback - Phục vụ React Router và xử lý API 404
 app.get(/(.*)/, (req, res) => {
+    // Nếu gọi hụt API thì trả về JSON lỗi, không trả về HTML
+    if (req.path.startsWith('/api/')) {
+        return res.status(404).json({ error: 'API route not found' });
+    }
     const indexPath = path.join(distPath, 'index.html');
     if (fs.existsSync(indexPath)) res.sendFile(indexPath);
     else res.status(404).send("Build not found");
