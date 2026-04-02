@@ -852,6 +852,14 @@ app.get('/api/chat/history/:roomId', async (req, res) => {
         res.json(decryptedMessages);
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
+// --- CATCH-ALL FOR REACT ROUTER ---
+app.get('*', (req, res) => {
+    // If request is for an API that doesn't exist, don't return HTML
+    if (req.path.startsWith('/api/')) {
+        return res.status(404).json({ error: 'API route not found' });
+    }
+    res.sendFile(path.join(distPath, 'index.html'));
+});
 
 // --- SOCKET.IO LOGIC ---
 const socketMap = {};
