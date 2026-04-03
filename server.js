@@ -718,7 +718,7 @@ app.post('/api/auth/register', async (req, res) => {
         const user = new User({ username, email, password: hashedPassword });
         await user.save();
         res.json({ success: true });
-    } catch (err) { res.status(500).send('Server Error'); }
+    } catch (err) { res.status(500).json({ error: 'Server Error' }); }
 });
 
 app.post('/api/auth/login', async (req, res) => {
@@ -733,7 +733,7 @@ app.post('/api/auth/login', async (req, res) => {
             user: { id: user.id, username: user.username, email: user.email, currentRoom: user.currentRoom, avatar: user.avatar },
             token: jwt.sign({ userId: user.id }, JWT_SECRET, { expiresIn: '7d' })
         });
-    } catch (err) { res.status(500).send('Server Error'); }
+    } catch (err) { res.status(500).json({ error: 'Server Error' }); }
 });
 
 // Zero-Trust Room Access Token

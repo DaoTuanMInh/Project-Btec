@@ -84,4 +84,5 @@ export type SignalingMessage =
   | { type: 'media-response'; from: string; to?: string; roomId: string; payload: { kind: 'audio' | 'video' | 'join_requirement'; status: 'accepted' | 'denied'; userName: string } }
   | { type: 'user-update'; from: string; to?: string; roomId: string; payload: { muted?: boolean; videoOff?: boolean } }
   | { type: 'reaction'; from: string; to?: string; roomId: string; payload: { emoji: string; senderName?: string; index?: number } }
-  | { type: 'transcript-chunk'; from: string; to?: string; roomId: string; payload: { text: string; userName: string; } };
+  | { type: 'transcript-chunk'; from: string; to?: string; roomId: string; payload: { text: string; userName: string; } }
+  | { type: 'announcement'; from: string; to?: string; roomId: string; payload: { message: string; lang: string; } };

@@ -78,6 +78,51 @@ export const useWebRTC = ({
         };
     }, [setMessages, transcriptRef, isSidebarOpenRef, activeTabRef, setUnreadCount, processedMsgIdsRef]);
 
+    const iceServersRef = useRef<RTCIceServer[]>([
+        { urls: 'stun:stun.l.google.com:19302' },
+        { urls: 'stun:stun1.l.google.com:19302' },
+        { urls: 'stun:stun2.l.google.com:19302' },
+        { urls: 'stun:stun3.l.google.com:19302' },
+        // Fallback Metered credentials (from user request)
+        { urls: "stun:stun.relay.metered.ca:80" },
+        {
+            urls: "turn:global.relay.metered.ca:80",
+            username: "2e9f66a4c3b48062e4e860ef",
+            credential: "xegVtA0WDy37IdFL",
+        },
+        {
+            urls: "turn:global.relay.metered.ca:80?transport=tcp",
+            username: "2e9f66a4c3b48062e4e860ef",
+            credential: "xegVtA0WDy37IdFL",
+        },
+        {
+            urls: "turn:global.relay.metered.ca:443",
+            username: "2e9f66a4c3b48062e4e860ef",
+            credential: "xegVtA0WDy37IdFL",
+        },
+        {
+            urls: "turns:global.relay.metered.ca:443?transport=tcp",
+            username: "2e9f66a4c3b48062e4e860ef",
+            credential: "xegVtA0WDy37IdFL",
+        },
+    ]);
+
+    useEffect(() => {
+        const fetchIceServers = async () => {
+            try {
+                const response = await fetch("https://avomeeting.metered.live/api/v1/turn/credentials?apiKey=ee39f52e484387bf9a2cf2d22ed77906b7e1");
+                const data = await response.json();
+                if (Array.isArray(data)) {
+                    console.log("[WebRTC] Dynamic TURN credentials loaded successfully");
+                    iceServersRef.current = data;
+                }
+            } catch (e) {
+                console.error("[WebRTC] Failed to fetch dynamic TURN credentials, using defaults:", e);
+            }
+        };
+        fetchIceServers();
+    }, []);
+
     const createPeerConnection = useCallback((remoteId: string, remoteName: string, isOfferer: boolean) => {
         if (pcRef.current[remoteId] && pcRef.current[remoteId].signalingState !== 'closed') {
             return pcRef.current[remoteId];
@@ -85,37 +130,7 @@ export const useWebRTC = ({
 
         // Config STUN/TURN Servers for NAT Traversal
         const pc = new RTCPeerConnection({
-            iceServers: [
-                { urls: 'stun:stun.l.google.com:19302' },
-                { urls: 'stun:stun1.l.google.com:19302' },
-                { urls: 'stun:stun2.l.google.com:19302' },
-                { urls: 'stun:stun3.l.google.com:19302' },
-
-                // METERED.CA TURN SERVERS 
-                {
-                    urls: "stun:stun.relay.metered.ca:80",
-                },
-                {
-                    urls: "turn:global.relay.metered.ca:80",
-                    username: "ced9c97d1117ab8c44246147",
-                    credential: "EGcsAepJdb+9jDuq",
-                },
-                {
-                    urls: "turn:global.relay.metered.ca:80?transport=tcp",
-                    username: "ced9c97d1117ab8c44246147",
-                    credential: "EGcsAepJdb+9jDuq",
-                },
-                {
-                    urls: "turn:global.relay.metered.ca:443",
-                    username: "ced9c97d1117ab8c44246147",
-                    credential: "EGcsAepJdb+9jDuq",
-                },
-                {
-                    urls: "turns:global.relay.metered.ca:443?transport=tcp",
-                    username: "ced9c97d1117ab8c44246147",
-                    credential: "EGcsAepJdb+9jDuq",
-                },
-            ]
+            iceServers: iceServersRef.current
         });
 
         if (isOfferer) {

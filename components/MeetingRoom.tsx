@@ -27,6 +27,7 @@ interface Props {
 const MeetingRoom: React.FC<Props> = ({ user, roomId, localStream, onLeave, settings }) => {
   // 1. Init State
   const state = useMeetingState(user, settings);
+  const { setPeers, showToast, roomSettingsRef } = state;
   const transcriptRef = useRef<string[]>([]);
   const dataChannelsRef = useRef<Record<string, RTCDataChannel>>({}); // E2EE Chat
   const processedMsgIdsRef = useRef(new Set<string>()); // Anti-spam/dedup tracking
@@ -136,26 +137,26 @@ const MeetingRoom: React.FC<Props> = ({ user, roomId, localStream, onLeave, sett
   }, [state.isVerified, isMuted, roomId, user.id, user.name]);
 
   const toggleMute = useCallback((force = false) => {
-    if (!force && state.roomSettingsRef.current?.requireMic && !isMutedRef.current) {
-      state.showToast("The room settings require Mic to be turned on!", 'warning'); return;
+    if (!force && roomSettingsRef.current?.requireMic && !isMutedRef.current) {
+      showToast("The room settings require Mic to be turned on!", 'warning'); return;
     }
     const newVal = !isMutedRef.current;
     localStream.getAudioTracks().forEach(t => t.enabled = !newVal);
     setIsMuted(newVal); isMutedRef.current = newVal;
-    state.setPeers(prev => prev.map(p => p.isLocal ? { ...p, muted: newVal, isScreenShare: media.isScreenSharing } : p));
+    setPeers(prev => prev.map(p => p.isLocal ? { ...p, muted: newVal, isScreenShare: media.isScreenSharing } : p));
     signaling.send('user-update', user.id, undefined, roomId, { muted: newVal, isScreenShare: media.isScreenSharing });
-  }, [roomId, user.id, localStream, state, media.isScreenSharing]);
+  }, [roomId, user.id, localStream, media.isScreenSharing, roomSettingsRef, showToast, setPeers]);
 
   const toggleVideo = useCallback((force = false) => {
-    if (!force && state.roomSettingsRef.current?.requireCamera && !isVideoOffRef.current) {
-      state.showToast("The room settings require Camera to be turned on!", 'warning'); return;
+    if (!force && roomSettingsRef.current?.requireCamera && !isVideoOffRef.current) {
+      showToast("The room settings require Camera to be turned on!", 'warning'); return;
     }
     const newVal = !isVideoOffRef.current;
     localStream.getVideoTracks().forEach(t => t.enabled = !newVal);
     setIsVideoOff(newVal); isVideoOffRef.current = newVal;
-    state.setPeers(prev => prev.map(p => p.isLocal ? { ...p, videoOff: newVal, isScreenShare: media.isScreenSharing } : p));
+    setPeers(prev => prev.map(p => p.isLocal ? { ...p, videoOff: newVal, isScreenShare: media.isScreenSharing } : p));
     signaling.send('user-update', user.id, undefined, roomId, { videoOff: newVal, isScreenShare: media.isScreenSharing });
-  }, [roomId, user.id, localStream, state, media.isScreenSharing]);
+  }, [roomId, user.id, localStream, media.isScreenSharing, roomSettingsRef, showToast, setPeers]);
 
   const chooseSupportedMimeType = () => {
     const candidates = [
@@ -179,11 +180,7 @@ const MeetingRoom: React.FC<Props> = ({ user, roomId, localStream, onLeave, sett
       return;
     }
     if (isRecording) return;
-    if (!localStream || !localStream.getAudioTracks().length) {
-      state.showToast('No local audio track found. Please enable microphone.', 'error');
-      return;
-    }
-
+    
     if (typeof MediaRecorder === 'undefined') {
       state.showToast('MediaRecorder is not supported in your browser', 'error');
       return;
@@ -200,37 +197,57 @@ const MeetingRoom: React.FC<Props> = ({ user, roomId, localStream, onLeave, sett
     targetFileNameRef.current = normalizedName;
     setRecordingName(normalizedName);
 
+    let recordingStream: MediaStream;
+    let audioCtx: AudioContext | null = null;
 
-    // Ensure audio track is active and create a dedicated audio stream for recording
-    const audioTracks = localStream.getAudioTracks();
-    const activeTrack = audioTracks.find(track => track.kind === 'audio' && track.enabled && track.readyState === 'live');
+    try {
+      // 1. Create an AudioContext to mix all audio sources
+      audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
+      if (audioCtx.state === 'suspended') {
+        await audioCtx.resume();
+      }
+      const destination = audioCtx.createMediaStreamDestination();
 
-    if (!activeTrack) {
-      state.showToast('Could not start recording: no active audio track found. Please enable microphone and permissions.', 'error');
-      return;
+      // 2. Add Local Stream (if active and enabled)
+      if (localStream.getAudioTracks().length > 0) {
+        const localSource = audioCtx.createMediaStreamSource(localStream);
+        localSource.connect(destination);
+      }
+
+      // 3. Add all Remote Peer Streams
+      state.peers.forEach(peer => {
+        if (!peer.isLocal && peer.stream && peer.stream.getAudioTracks().length > 0) {
+          const remoteSource = audioCtx.createMediaStreamSource(peer.stream);
+          remoteSource.connect(destination);
+        }
+      });
+
+      recordingStream = destination.stream;
+      
+      // Keep the context alive for the duration of the recording
+      (recordingStream as any)._audioCtx = audioCtx; 
+
+    } catch (mixerErr) {
+       console.error("Failed to setup audio mixer:", mixerErr);
+       // Fallback to local stream only if AudioContext fails (e.g. strict policies)
+       const activeTrack = localStream.getAudioTracks().find(t => t.readyState === 'live');
+       if (!activeTrack) {
+         state.showToast('No active audio track found. Please enable microphone or have participants speak.', 'error');
+         return;
+       }
+       recordingStream = new MediaStream([activeTrack]);
     }
 
-    const recordingStream = new MediaStream([activeTrack]);
     const options: any = { mimeType: chosenMimeType, audioBitsPerSecond: 128000 };
     let recorder: MediaRecorder | null = null;
 
     const createRecorder = async () => {
       try {
-        console.log('[Recording] Attempting MediaRecorder on tracking stream with mimeType:', chosenMimeType);
+        console.log('[Recording] Attempting MediaRecorder on mixed stream with mimeType:', chosenMimeType);
         return new MediaRecorder(recordingStream, options);
-      } catch (primaryErr) {
-        console.warn('[Recording] Primary MediaRecorder failed', primaryErr);
-        try {
-          const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
-          const sourceNode = audioCtx.createMediaStreamSource(localStream);
-          const destination = audioCtx.createMediaStreamDestination();
-          sourceNode.connect(destination);
-          console.log('[Recording] Fallback MediaRecorder with AudioContext destination stream.');
-          return new MediaRecorder(destination.stream, options);
-        } catch (fallbackErr) {
-          console.error('[Recording] Fallback MediaRecorder failed', fallbackErr);
-          throw fallbackErr;
-        }
+      } catch (err) {
+        console.error('[Recording] MediaRecorder failed', err);
+        throw err;
       }
     };
 
@@ -247,6 +264,12 @@ const MeetingRoom: React.FC<Props> = ({ user, roomId, localStream, onLeave, sett
       setRecordedBlobs([]);
       setRecordingLabel('Recording...');
 
+      // Notify everyone that the recording has started with TTS
+      signaling.send('announcement', user.id, undefined, roomId, {
+        message: 'The host is now recording the meeting.',
+        lang: 'en-US'
+      });
+
       const chunks: Blob[] = [];
       recorder.ondataavailable = (event: BlobEvent) => {
         if (event.data && event.data.size > 0) {
@@ -255,12 +278,32 @@ const MeetingRoom: React.FC<Props> = ({ user, roomId, localStream, onLeave, sett
         }
       };
 
-        recorder.onstop = async () => {
+      recorder.onstop = async () => {
         setIsRecording(false);
         setRecordingLabel('Uploading final recording...');
 
         const blob = new Blob(chunks, { type: 'audio/webm' });
+        
+        if (blob.size === 0) {
+            state.showToast('Recording failed: Audio stream produced no data. Please ensure your microphone is active.', 'error');
+            // Teardown the audio context
+            if ((recordingStream as any)._audioCtx) {
+               (recordingStream as any)._audioCtx.close();
+            }
+            if (roomCloseAfterSave) {
+              setRoomCloseAfterSave(false);
+              signaling.send('leave', user.id, undefined, roomId, {});
+              onLeave();
+            }
+            return;
+        }
+
         await uploadRecordedBlob(blob, targetFileNameRef.current);
+
+        // Teardown the audio context
+        if ((recordingStream as any)._audioCtx) {
+           (recordingStream as any)._audioCtx.close();
+        }
 
         if (roomCloseAfterSave) {
           setRoomCloseAfterSave(false);

@@ -50,6 +50,9 @@ const VideoTile: React.FC<VideoTileProps> = ({ peer, isBlurred, isPinned, onPin,
       const bufferLength = analyser.frequencyBinCount;
       const dataArray = new Uint8Array(bufferLength);
 
+      let lastSpeakingState = false;
+      let lastToggleTime = 0;
+
       const checkAudio = () => {
         analyser.getByteFrequencyData(dataArray);
         let sum = 0;
@@ -59,7 +62,15 @@ const VideoTile: React.FC<VideoTileProps> = ({ peer, isBlurred, isPinned, onPin,
         const average = sum / bufferLength;
 
         // Threshold for speaking
-        setIsSpeaking(average > 15);
+        const isCurrentlySpeaking = average > 15;
+        const now = Date.now();
+        
+        if (isCurrentlySpeaking !== lastSpeakingState && now - lastToggleTime > 200) {
+            setIsSpeaking(isCurrentlySpeaking);
+            lastSpeakingState = isCurrentlySpeaking;
+            lastToggleTime = now;
+        }
+
         animationFrame = requestAnimationFrame(checkAudio);
       };
 

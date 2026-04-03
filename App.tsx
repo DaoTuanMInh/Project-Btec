@@ -59,8 +59,11 @@ const App: React.FC = () => {
 
   useEffect(() => {
     if (isAuthenticated) {
-      console.log("[App] App Mounted - Initializing Camera Singleton");
-      setupMedia.startCamera(false);
+      const savedSession = sessionStorage.getItem('avo-meeting-session');
+      if (!savedSession) {
+        console.log("[App] App Mounted - Initializing Camera Singleton");
+        setupMedia.startCamera(false);
+      }
     }
 
     const handleUnload = () => {
@@ -163,7 +166,7 @@ const App: React.FC = () => {
     // Automatically restart camera for the setup screen preview
     setTimeout(() => {
       setupMedia.startCamera(false);
-    }, 300);
+    }, 1200);
   };
 
   if (!isAuthChecked) return <div className="min-h-screen bg-slate-950 flex items-center justify-center text-slate-500">Loading...</div>;

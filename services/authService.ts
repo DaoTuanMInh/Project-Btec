@@ -62,7 +62,13 @@ export const register = async (email: string, username: string, password: string
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ email, username, password })
   });
-  const data = await res.json();
+  const text = await res.text();
+  let data;
+  try {
+    data = text ? JSON.parse(text) : {};
+  } catch (e) {
+    throw new Error('Máy chủ gặp lỗi hoặc không trả về dữ liệu chuẩn');
+  }
   if (!res.ok) throw new Error(data.error || 'Registration failed');
 };
 
@@ -72,7 +78,14 @@ export const login = async (email: string, password: string, rememberMe = false)
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ email, password })
   });
-  const data = await res.json();
+  
+  const text = await res.text();
+  let data;
+  try {
+    data = text ? JSON.parse(text) : {};
+  } catch (e) {
+    throw new Error('Máy chủ gặp lỗi hoặc không trả về dữ liệu chuẩn');
+  }
 
   if (!res.ok) throw new Error(data.error || 'Login failed');
 

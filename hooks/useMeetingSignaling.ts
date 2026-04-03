@@ -402,6 +402,15 @@ export const useMeetingSignaling = ({
                     if (transcriptRef.current) transcriptRef.current.push(`${msg.payload.userName}: ${msg.payload.text}`);
                     break;
 
+                case 'announcement':
+                    showToast(msg.payload.message, 'info');
+                    if ('speechSynthesis' in window) {
+                        const utterance = new SpeechSynthesisUtterance(msg.payload.message);
+                        utterance.lang = msg.payload.lang || 'en-US';
+                        window.speechSynthesis.speak(utterance);
+                    }
+                    break;
+
 
             }
         };
