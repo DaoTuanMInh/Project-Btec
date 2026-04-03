@@ -147,30 +147,101 @@ const saveToDocx = async (text, title, outputPath) => {
 const meetingContentQueue = [];
 let workerBusy = false;
 
-const transcribeAudioFile = async (wavPath) => {
-    if (!process.env.GROQ_API_KEY) throw new Error('GROQ_API_KEY not set');
-    if (!wavPath || !fs.existsSync(wavPath)) throw new Error(`Transcription API failed: wav file not found at ${wavPath}`);
-
-    const fileBuffer = fs.readFileSync(wavPath);
+// Helper: transcribe a single WAV chunk file via Groq Whisper
+const transcribeSingleChunk = async (chunkPath) => {
+    const fileBuffer = fs.readFileSync(chunkPath);
     const blob = new Blob([fileBuffer], { type: 'audio/wav' });
     const formData = new FormData();
     formData.append('model', 'whisper-large-v3');
-    formData.append('file', blob, 'audio.wav');
+    formData.append('file', blob, path.basename(chunkPath));
 
     const resp = await fetch('https://api.groq.com/openai/v1/audio/transcriptions', {
         method: 'POST',
-        headers: {
-            'Authorization': `Bearer ${process.env.GROQ_API_KEY}`
-        },
+        headers: { 'Authorization': `Bearer ${process.env.GROQ_API_KEY}` },
         body: formData
     });
+
     if (!resp.ok) {
-        const text = await resp.text();
-        throw new Error(`Transcription API failed: ${text}`);
+        const errText = await resp.text();
+        throw new Error(`Transcription API failed on chunk ${path.basename(chunkPath)}: ${errText}`);
     }
 
     const data = await resp.json();
     return data.text || '';
+};
+
+// Main transcription function with chunking support (10-minute segments, ~20MB each)
+const transcribeAudioFile = async (wavPath) => {
+    if (!process.env.GROQ_API_KEY) throw new Error('GROQ_API_KEY not set');
+    if (!wavPath || !fs.existsSync(wavPath)) throw new Error(`Transcription API failed: wav file not found at ${wavPath}`);
+
+    const CHUNK_DURATION_SECONDS = 600; // 10 minutes per chunk
+    const fileStats = fs.statSync(wavPath);
+    const fileSizeMB = fileStats.size / (1024 * 1024);
+
+    console.log(`[Transcribe] File size: ${fileSizeMB.toFixed(1)}MB`);
+
+    // If file is under 23MB, transcribe directly without chunking
+    if (fileSizeMB < 23) {
+        console.log(`[Transcribe] Small file - direct transcription`);
+        return await transcribeSingleChunk(wavPath);
+    }
+
+    // Large file: split into chunks using ffmpeg
+    console.log(`[Transcribe] Large file - splitting into ${CHUNK_DURATION_SECONDS}s chunks`);
+    const ffmpegExecutable = getFfmpegExecutable();
+    if (!ffmpegExecutable) throw new Error('ffmpeg not found, cannot split audio chunks');
+
+    const chunkDir = path.join(uploadsPath, `chunks_${Date.now()}`);
+    fs.mkdirSync(chunkDir, { recursive: true });
+    const chunkPattern = path.join(chunkDir, 'chunk_%03d.wav');
+
+    // Split WAV into fixed-duration segments
+    await new Promise((resolve, reject) => {
+        const ffmpeg = spawn(ffmpegExecutable, [
+            '-y', '-i', wavPath,
+            '-f', 'segment',
+            '-segment_time', String(CHUNK_DURATION_SECONDS),
+            '-c', 'copy',
+            chunkPattern
+        ]);
+        let stderr = '';
+        ffmpeg.stderr.on('data', d => { stderr += d.toString(); });
+        ffmpeg.on('error', reject);
+        ffmpeg.on('close', code => {
+            if (code !== 0) return reject(new Error(`ffmpeg chunk split failed (code ${code}): ${stderr.slice(-300)}`));
+            resolve(true);
+        });
+    });
+
+    // Collect and sort chunk files
+    const chunkFiles = fs.readdirSync(chunkDir)
+        .filter(f => f.endsWith('.wav'))
+        .sort()
+        .map(f => path.join(chunkDir, f));
+
+    console.log(`[Transcribe] Created ${chunkFiles.length} chunks, transcribing each...`);
+
+    const transcripts = [];
+    for (let i = 0; i < chunkFiles.length; i++) {
+        const chunkPath = chunkFiles[i];
+        const chunkSizeMB = fs.statSync(chunkPath).size / (1024 * 1024);
+        console.log(`[Transcribe] Chunk ${i + 1}/${chunkFiles.length} (${chunkSizeMB.toFixed(1)}MB)...`);
+        const text = await transcribeSingleChunk(chunkPath);
+        if (text.trim()) transcripts.push(text.trim());
+    }
+
+    // Cleanup chunk directory
+    try {
+        fs.rmSync(chunkDir, { recursive: true, force: true });
+        console.log(`[Transcribe] Cleaned up chunk directory`);
+    } catch (e) {
+        console.warn('[Transcribe] Could not cleanup chunk dir:', e.message);
+    }
+
+    const combined = transcripts.join(' ');
+    console.log(`[Transcribe] All chunks merged. Total length: ${combined.length} chars`);
+    return combined;
 };
 
 const formatTranscriptWithSpeakers = async (rawText, participants, isLive = false) => {
