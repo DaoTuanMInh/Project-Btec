@@ -38,7 +38,7 @@ const VideoTile: React.FC<VideoTileProps> = ({ peer, isBlurred, isPinned, onPin,
     let audioContext: AudioContext;
     let analyser: AnalyserNode;
     let source: MediaStreamAudioSourceNode;
-    let animationFrame: number;
+    let intervalId: NodeJS.Timeout;
 
     try {
       audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
@@ -51,7 +51,6 @@ const VideoTile: React.FC<VideoTileProps> = ({ peer, isBlurred, isPinned, onPin,
       const dataArray = new Uint8Array(bufferLength);
 
       let lastSpeakingState = false;
-      let lastToggleTime = 0;
 
       const checkAudio = () => {
         analyser.getByteFrequencyData(dataArray);
@@ -63,24 +62,21 @@ const VideoTile: React.FC<VideoTileProps> = ({ peer, isBlurred, isPinned, onPin,
 
         // Threshold for speaking
         const isCurrentlySpeaking = average > 15;
-        const now = Date.now();
         
-        if (isCurrentlySpeaking !== lastSpeakingState && now - lastToggleTime > 200) {
+        if (isCurrentlySpeaking !== lastSpeakingState) {
             setIsSpeaking(isCurrentlySpeaking);
             lastSpeakingState = isCurrentlySpeaking;
-            lastToggleTime = now;
         }
-
-        animationFrame = requestAnimationFrame(checkAudio);
       };
 
-      checkAudio();
+      // Run checking every 150ms instead of 60FPS to drastically save CPU
+      intervalId = setInterval(checkAudio, 150);
     } catch (e) {
       console.error("Audio analysis failed", e);
     }
 
     return () => {
-      if (animationFrame) cancelAnimationFrame(animationFrame);
+      if (intervalId) clearInterval(intervalId);
       if (source) source.disconnect();
       if (audioContext) audioContext.close();
     };

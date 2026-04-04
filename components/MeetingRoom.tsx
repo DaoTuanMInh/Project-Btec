@@ -117,14 +117,20 @@ const MeetingRoom: React.FC<Props> = ({ user, roomId, localStream, onLeave, sett
     };
 
     recognition.onerror = (e: any) => {
-      if (e.error === 'not-allowed' || e.error === 'audio-capture') {
+      // Catch fatal errors that should permanently stop recognition for this session
+      if (e.error === 'not-allowed' || e.error === 'audio-capture' || e.error === 'service-not-allowed') {
           isManuallyStopped = true;
       }
     };
     
     recognition.onend = () => {
-      if (!isManuallyStopped) {
-         try { recognition.start(); } catch(e){}
+      if (!isManuallyStopped && !isMuted) {
+         // FIX: Use setTimeout to prevent maximum call stack / tight CPU loop if recognition immediately fails to start
+         setTimeout(() => {
+            if (!isManuallyStopped && !isMuted) {
+               try { recognition.start(); } catch(e){}
+            }
+         }, 1000);
       }
     };
 
@@ -132,7 +138,7 @@ const MeetingRoom: React.FC<Props> = ({ user, roomId, localStream, onLeave, sett
 
     return () => {
       isManuallyStopped = true;
-      recognition.stop();
+      try { recognition.stop(); } catch(e){}
     };
   }, [state.isVerified, isMuted, roomId, user.id, user.name]);
 
