@@ -34,11 +34,40 @@ const initSocket = (io) => {
             if (typeof password === 'function') { callback = password; password = null; }
             try {
                 const room = await Room.findOne({ roomId, isActive: true });
-                const scheduled = !room ? await ScheduledMeeting.findOne({ roomId }) : null;
+                // Always look up scheduled meeting – needed for invite-only enforcement on active rooms too
+                const scheduled = await ScheduledMeeting.findOne({ roomId });
                 const serverPass = room?.password || room?.settings?.password || '';
+
+                // Determine if the user is the host
                 const isHost = room
                     ? (room.hostId === userId || room.host === userId)
                     : (scheduled && (scheduled.hostId === userId || scheduled.hostEmail === userId));
+
+                // ── Invite-only access control for scheduled meetings ──
+                // Applies whether room is waiting OR already active — host is always allowed
+                if (scheduled && !isHost) {
+                    const invitedEmails = scheduled.invitedEmails || [];
+                    if (invitedEmails.length > 0) {
+                        // Resolve userId to user email for comparison
+                        let userEmail = null;
+                        try {
+                            const userDoc = await User.findById(userId).select('email');
+                            if (userDoc) userEmail = userDoc.email;
+                        } catch (_) {}
+
+                        const normalizedInvited = invitedEmails.map(e => e.trim().toLowerCase());
+                        const isInvited = userEmail && normalizedInvited.includes(userEmail.trim().toLowerCase());
+
+                        if (!isInvited) {
+                            return callback({
+                                exists: false,
+                                accessDenied: true,
+                                accessDeniedReason: 'You are not on the invite list for this scheduled meeting.'
+                            });
+                        }
+                    }
+                }
+
                 callback({
                     exists: !!room || (!!scheduled && isHost),
                     isScheduledWaiting: !!scheduled && !room && !isHost,

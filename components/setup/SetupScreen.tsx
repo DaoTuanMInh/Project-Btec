@@ -111,9 +111,10 @@ const SetupScreen: React.FC<Props> = ({ onJoin, setupMedia, initialName = "", us
     try {
       const { signaling } = await import('../../services/signaling');
       // Check room with userId to detect if Host
-      const { exists, requiresPassword, valid, locked, isHost, isEmpty, isScheduledWaiting, scheduledSettings } = await signaling.checkRoom(targetRoom, joinPassword, userId);
-      console.log("Room Check Result:", { exists, requiresPassword, valid, locked, isHost, isEmpty, isScheduledWaiting, inputPass: joinPassword });
+      const { exists, requiresPassword, valid, locked, isHost, isEmpty, isScheduledWaiting, scheduledSettings, accessDenied, accessDeniedReason } = await signaling.checkRoom(targetRoom, joinPassword, userId);
+      console.log("Room Check Result:", { exists, requiresPassword, valid, locked, isHost, isEmpty, isScheduledWaiting, accessDenied, inputPass: joinPassword });
 
+      if (accessDenied) return showToast(`🚫 ${accessDeniedReason || 'You are not invited to this meeting.'}`, 'error');
       if (isScheduledWaiting) return showToast("This scheduled meeting has not been started by the Host.", 'warning');
       if (!exists) return showToast("Room does not exist or has ended.", 'error');
       if (locked) return showToast("🔒 Room is locked. Cannot join.", 'error');

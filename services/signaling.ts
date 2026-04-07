@@ -118,7 +118,7 @@ class SignalingService {
   }
 
   // Check if room exists before joining
-  checkRoom(roomId: string, password?: string, userId?: string): Promise<{ exists: boolean; requiresPassword: boolean; valid: boolean; locked: boolean; isHost?: boolean; isEmpty?: boolean; isScheduledWaiting?: boolean; scheduledSettings?: any }> {
+  checkRoom(roomId: string, password?: string, userId?: string): Promise<{ exists: boolean; requiresPassword: boolean; valid: boolean; locked: boolean; isHost?: boolean; isEmpty?: boolean; isScheduledWaiting?: boolean; scheduledSettings?: any; accessDenied?: boolean; accessDeniedReason?: string }> {
     return new Promise((resolve) => {
       // Timeout protection
       const timer = setTimeout(() => resolve({ exists: false, requiresPassword: false, valid: false, locked: false, isEmpty: true }), 2000);
