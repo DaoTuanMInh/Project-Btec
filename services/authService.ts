@@ -96,7 +96,7 @@ export const login = async (email: string, password: string, rememberMe = false)
 
 // --- OTP Logic ---
 export const requestOtp = async (email: string) => {
-  const res = await fetch('/api/send-otp', {
+  const res = await fetch('/api/auth/send-otp', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ email })
@@ -107,7 +107,7 @@ export const requestOtp = async (email: string) => {
 };
 
 export const confirmOtp = async (email: string, code: string) => {
-  const res = await fetch('/api/verify-otp', {
+  const res = await fetch('/api/auth/verify-otp', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ email, code })
@@ -118,7 +118,7 @@ export const confirmOtp = async (email: string, code: string) => {
 };
 
 export const forgotPassword = async (email: string) => {
-  const res = await fetch('/api/forgot-password', {
+  const res = await fetch('/api/auth/forgot-password', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ email })
@@ -129,7 +129,7 @@ export const forgotPassword = async (email: string) => {
 };
 
 export const resetPassword = async (email: string, code: string, newPassword: string) => {
-  const res = await fetch('/api/reset-password', {
+  const res = await fetch('/api/auth/reset-password', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ email, code, newPassword })
