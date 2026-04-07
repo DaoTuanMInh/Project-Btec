@@ -131,8 +131,8 @@ const ProfileModal: React.FC<ProfileModalProps> = ({ isOpen, onClose, user, onUp
                             {activeTab === 'info' && (
                                 <div className="space-y-6">
                                     <div className="flex flex-col items-center gap-4">
-                                        <div className="relative group">
-                                            <div className="w-24 h-24 rounded-full overflow-hidden border-4 border-slate-700 bg-slate-800 flex items-center justify-center">
+                                        <div className="relative group w-24 h-24 mx-auto">
+                                            <div className="w-full h-full rounded-full overflow-hidden border-4 border-slate-700 bg-slate-800 flex items-center justify-center">
                                                 {avatarUrl ? (
                                                     <img src={avatarUrl} alt="Avatar" className="w-full h-full object-cover" onError={(e) => e.currentTarget.src = `https://ui-avatars.com/api/?name=${user.username}&background=random`} />
                                                 ) : (

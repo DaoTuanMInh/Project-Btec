@@ -35,7 +35,9 @@ const MediaPreview: React.FC<MediaPreviewProps> = ({
     // Handle re-play when camera is toggled back on
     useEffect(() => {
         if (isCameraOn && videoRef.current && stream) {
-            videoRef.current.play().catch(e => console.error("Play failed", e));
+            videoRef.current.play().catch(e => {
+                if (e.name !== 'AbortError') console.error("Play failed", e);
+            });
         }
     }, [isCameraOn, stream]);
 

@@ -200,7 +200,7 @@ router.put('/:id', async (req, res) => {
 });
 
 // AI: Tóm tắt chat
-router.post('/ai/summarize-chat', verifyToken, async (req, res) => {
+router.post('/summarize-chat', verifyToken, async (req, res) => {
     if (!process.env.GROQ_API_KEY) return res.status(503).json({ error: 'AI is not configured (missing GROQ_API_KEY)' });
     const { messages } = req.body;
     if (!messages || messages.length === 0) return res.status(400).json({ error: 'No chat content to summarize' });

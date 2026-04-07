@@ -108,7 +108,7 @@ const Sidebar: React.FC<SidebarProps> = ({
     if (match) {
       setMentionQuery({ active: true, query: match[1], index: match.index! });
     } else {
-      setMentionQuery({ active: false, query: '', index: 0 });
+      setMentionQuery(prev => prev.active ? { active: false, query: '', index: 0 } : prev);
     }
   };
 

@@ -179,9 +179,9 @@ const VideoGrid: React.FC<VideoGridProps> = ({ peers, isLocalBlurred, onToggleFu
     const otherPeers = peers.filter(p => p.userId !== pinnedId);
 
     return (
-      <div className="flex-1 p-0 md:p-4 w-full h-full flex flex-col md:flex-row gap-0 md:gap-4 overflow-y-auto md:overflow-hidden transition-all custom-scrollbar">
+      <div className="flex-1 p-0 md:p-4 w-full h-[100dvh] md:h-full flex flex-col md:flex-row gap-0 md:gap-4 overflow-hidden transition-all">
         {/* Main Stage - Pinned Video */}
-        <div className="w-full h-[55vh] md:h-auto md:flex-1 relative bg-slate-900/50 md:rounded-2xl overflow-hidden shadow-2xl border-b md:border border-white/5 group/stage shrink-0 sticky top-0 z-10">
+        <div className="w-full flex-1 md:w-auto relative bg-black md:bg-slate-900/50 md:rounded-2xl overflow-hidden shadow-2xl border-b md:border border-white/5 group/stage min-h-0">
           <VideoTile
             peer={pinnedPeer}
             isBlurred={isLocalBlurred}
@@ -217,25 +217,25 @@ const VideoGrid: React.FC<VideoGridProps> = ({ peers, isLocalBlurred, onToggleFu
         {isStripVisible && otherPeers.length > 0 && (
           <div className="
             w-full md:w-80 
-            h-auto md:h-full 
-            flex md:flex-col gap-3
+            h-40 md:h-full 
+            flex flex-row md:flex-col gap-3
             p-3 md:p-0
-            pb-32 md:pb-0
-            overflow-x-auto md:overflow-y-auto 
+            mb-20 md:mb-0
+            overflow-x-auto md:overflow-x-hidden md:overflow-y-auto 
             md:custom-scrollbar
             shrink-0
             animate-in slide-in-from-bottom md:slide-in-from-right duration-300
-            bg-slate-900/40 md:bg-transparent backdrop-blur-sm md:backdrop-blur-none
-            snap-x
+            bg-slate-900 md:bg-transparent backdrop-blur-sm md:backdrop-blur-none
+            snap-x snap-mandatory flex-nowrap
           ">
             {otherPeers.map(peer => (
-              <div key={peer.userId} className="w-40 md:w-full aspect-[9/12] md:aspect-auto md:h-44 md:min-h-[176px] cursor-pointer snap-start shrink-0" onClick={() => togglePin(peer.userId)}>
+              <div key={peer.userId} className="w-28 md:w-full h-full md:h-44 md:min-h-[176px] cursor-pointer snap-start shrink-0" onClick={() => togglePin(peer.userId)}>
                 <VideoTile
                   peer={peer}
                   isBlurred={isLocalBlurred}
                   isPinned={false}
                   onPin={togglePin}
-                  className="w-full h-full object-cover rounded-2xl border border-white/10 shadow-xl"
+                  className="w-full h-full object-cover rounded-xl border border-white/10 shadow-xl"
                 />
               </div>
             ))}

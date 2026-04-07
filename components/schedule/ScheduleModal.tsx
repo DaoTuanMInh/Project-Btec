@@ -279,10 +279,10 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({ isOpen, onClose, user, on
                     </div>
 
                     {/* Tabs */}
-                    <div className="flex px-5 gap-1 bg-slate-800/50 pt-2 shrink-0 border-b border-slate-800">
+                    <div className="flex px-5 gap-1 bg-slate-800/50 pt-2 shrink-0 border-b border-slate-800 overflow-x-auto no-scrollbar">
                         <button
                             onClick={() => setActiveTab('schedule')}
-                            className={`flex items-center gap-1.5 px-4 py-2.5 text-sm font-semibold rounded-t-lg transition-all border-b-2 ${activeTab === 'schedule'
+                            className={`whitespace-nowrap flex items-center gap-1.5 px-4 py-2.5 text-sm font-semibold rounded-t-lg transition-all border-b-2 ${activeTab === 'schedule'
                                 ? 'border-indigo-500 text-indigo-400 bg-slate-900/60'
                                 : 'border-transparent text-slate-500 hover:text-slate-300'}`}
                         >
@@ -291,7 +291,7 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({ isOpen, onClose, user, on
                         </button>
                         <button
                             onClick={() => setActiveTab('history')}
-                            className={`flex items-center gap-1.5 px-4 py-2.5 text-sm font-semibold rounded-t-lg transition-all border-b-2 ${activeTab === 'history'
+                            className={`whitespace-nowrap flex items-center gap-1.5 px-4 py-2.5 text-sm font-semibold rounded-t-lg transition-all border-b-2 ${activeTab === 'history'
                                 ? 'border-blue-500 text-blue-400 bg-slate-900/60'
                                 : 'border-transparent text-slate-500 hover:text-slate-300'}`}
                         >
@@ -299,7 +299,7 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({ isOpen, onClose, user, on
                         </button>
                         <button
                             onClick={() => setActiveTab('meeting-content')}
-                            className={`flex items-center gap-1.5 px-4 py-2.5 text-sm font-semibold rounded-t-lg transition-all border-b-2 ${activeTab === 'meeting-content'
+                            className={`whitespace-nowrap flex items-center gap-1.5 px-4 py-2.5 text-sm font-semibold rounded-t-lg transition-all border-b-2 ${activeTab === 'meeting-content'
                                 ? 'border-emerald-500 text-emerald-400 bg-slate-900/60'
                                 : 'border-transparent text-slate-500 hover:text-slate-300'}`}
                         >
