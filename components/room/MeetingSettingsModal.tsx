@@ -342,12 +342,12 @@ const MeetingSettingsModal: React.FC<Props> = ({
                                                 {c.status === 'completed' && (
                                                     <>
                                                         {c.summaryDocxUrl && (
-                                                            <a href={c.summaryDocxUrl} target="_blank" rel="noreferrer" className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-fuchsia-600/20 hover:bg-fuchsia-600/30 text-fuchsia-300 text-[10px] font-semibold transition-colors">
+                                                            <a href={`${c.summaryDocxUrl}?token=${getToken()}`} target="_blank" rel="noreferrer" className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-fuchsia-600/20 hover:bg-fuchsia-600/30 text-fuchsia-300 text-[10px] font-semibold transition-colors">
                                                                 <Download size={12} /> Summary (.docx)
                                                             </a>
                                                         )}
                                                         {c.transcriptDocxUrl && (
-                                                            <a href={c.transcriptDocxUrl} target="_blank" rel="noreferrer" className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-300 text-[10px] font-semibold transition-colors">
+                                                            <a href={`${c.transcriptDocxUrl}?token=${getToken()}`} target="_blank" rel="noreferrer" className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-300 text-[10px] font-semibold transition-colors">
                                                                 <Download size={12} /> Transcript (.docx)
                                                             </a>
                                                         )}

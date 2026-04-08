@@ -23,7 +23,7 @@ const upload = multer({ storage, limits: { fileSize: 50 * 1024 * 1024 } });
 // Middleware xác thực JWT
 const verifyToken = (req, res, next) => {
     const authHeader = req.headers['authorization'];
-    const token = authHeader && authHeader.split(' ')[1];
+    const token = (authHeader && authHeader.split(' ')[1]) || req.query.token;
     if (!token) return res.status(401).json({ error: 'No authentication token' });
     try {
         const decoded = jwt.verify(token, JWT_SECRET);
@@ -69,19 +69,24 @@ router.post('/:roomId/record', verifyToken, upload.single('audio'), async (req, 
 });
 
 // Download file
-router.get('/download-file/:filename', async (req, res) => {
+router.get('/download-file/:filename', verifyToken, async (req, res) => {
     const filename = req.params.filename;
     const filePath = path.join(uploadsPath, filename);
     if (!fs.existsSync(filePath)) return res.status(404).send('File not found');
     try {
         const content = await MeetingContent.findOne({
             $or: [
+                { audioPath: { $regex: filename } },
+                { wavPath: { $regex: filename } },
                 { transcriptPath: { $regex: filename } },
                 { transcriptDocxPath: { $regex: filename } },
                 { summaryPath: { $regex: filename } },
                 { summaryDocxPath: { $regex: filename } }
             ]
         });
+        if (content && content.hostId !== req.userId) {
+            return res.status(403).json({ error: 'You are not authorized to download this file.' });
+        }
         let downloadName = filename;
         if (content) {
             const ext = path.extname(filename);

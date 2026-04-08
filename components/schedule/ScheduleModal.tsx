@@ -532,8 +532,8 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({ isOpen, onClose, user, on
                                             </div>
                                         )}
                                                 <div className="mt-4 flex gap-2 flex-wrap">
-                                                    {c.summaryDocxUrl && <a href={c.summaryDocxUrl} target="_blank" rel="noreferrer" className="px-3 py-1.5 rounded-lg bg-fuchsia-600 hover:bg-fuchsia-500 text-white text-xs font-semibold">Download Summary (.docx)</a>}
-                                                    {c.transcriptDocxUrl && <a href={c.transcriptDocxUrl} target="_blank" rel="noreferrer" className="px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold">Download Transcript (.docx)</a>}
+                                                    {c.summaryDocxUrl && <a href={`${c.summaryDocxUrl}?token=${getToken()}`} target="_blank" rel="noreferrer" className="px-3 py-1.5 rounded-lg bg-fuchsia-600 hover:bg-fuchsia-500 text-white text-xs font-semibold">Download Summary (.docx)</a>}
+                                                    {c.transcriptDocxUrl && <a href={`${c.transcriptDocxUrl}?token=${getToken()}`} target="_blank" rel="noreferrer" className="px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold">Download Transcript (.docx)</a>}
                                                     {c.status === 'failed' && <button onClick={() => handleRetryMeetingContent(c._id)} className="px-3 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-white text-xs font-semibold">Retry Processing</button>}
                                                     <button onClick={() => setDeleteContentId(c._id)} className="px-3 py-1.5 rounded-lg bg-red-600 hover:bg-red-500 text-white text-xs font-semibold">Delete</button>
                                                 </div>

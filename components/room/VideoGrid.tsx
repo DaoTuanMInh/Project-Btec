@@ -95,7 +95,7 @@ const VideoTile: React.FC<VideoTileProps> = ({ peer, isBlurred, isPinned, onPin,
         onLoadedMetadata={() => {
           videoRef.current?.play().catch(e => console.warn(e));
         }}
-        className={`w-full h-full ${isPinned ? 'object-contain' : 'object-cover'} transition-all duration-500 ${!peer.isScreenShare ? 'scale-x-[-1]' : ''} ${isBlurred && peer.isLocal ? 'blur-xl scale-110' : ''} ${shouldShowAvatar ? 'hidden' : 'block'}`}
+        className={`w-full h-full ${isPinned ? 'object-contain' : 'object-cover'} transition-all duration-500 ${peer.isLocal && !peer.isScreenShare ? 'scale-x-[-1]' : ''} ${isBlurred && peer.isLocal ? 'blur-xl scale-110' : ''} ${shouldShowAvatar ? 'hidden' : 'block'}`}
       />
 
       {/* Overlay Placeholder when Video is Off or Not Ready */}

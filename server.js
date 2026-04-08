@@ -41,7 +41,6 @@ app.use(express.static(distPath));
 
 const uploadsPath = path.join(__dirname, 'uploads');
 if (!fs.existsSync(uploadsPath)) fs.mkdirSync(uploadsPath);
-app.use('/uploads', express.static(uploadsPath));
 app.get('/favicon.ico', (req, res) => res.sendStatus(204));
 
 // 3. HTTP Server & Socket.io
@@ -69,7 +68,7 @@ app.use('/api/meetings', meetingsRouter);
 
 // /api/download-file is a sub-route of meetingsRouter
 app.get('/api/download-file/:filename', (req, res, next) => {
-    req.url = `/download-file/${req.params.filename}`;
+    req.url = req.url.replace('/api/download-file', '/download-file');
     meetingsRouter(req, res, next);
 });
 

@@ -549,14 +549,13 @@ const MeetingRoom: React.FC<Props> = ({ user, roomId, localStream, onLeave, sett
       const existingMe = prev.find(p => p.isLocal);
       const me = {
         userId: user.id,
-        stream: media.isScreenSharing && media.isScreenSharing ? (state.peers.find(p => p.isLocal)?.stream || localStream) : 
-                (media.isBlurred && media.canvasRef.current ? (media.sourceVideoRef.current as any)?.srcObject : localStream),
+        stream: existingMe ? existingMe.stream : localStream,
         userName: user.name,
         isLocal: true,
         muted: isMuted,
         videoOff: isVideoOff,
         avatar: user.avatar,
-        isScreenShare: media.isScreenSharing
+        isScreenShare: existingMe ? existingMe.isScreenShare : media.isScreenSharing
       };
 
       if (!existingMe) {
@@ -567,7 +566,7 @@ const MeetingRoom: React.FC<Props> = ({ user, roomId, localStream, onLeave, sett
       // Update local state in peer list
       return prev.map(p => p.isLocal ? me : p);
     });
-  }, [user.id, user.name, user.avatar, isMuted, isVideoOff, localStream, media.isScreenSharing]);
+  }, [user.id, user.name, user.avatar, isMuted, isVideoOff, localStream]);
 
   // Handle Chat Unread Count
   useEffect(() => {

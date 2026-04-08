@@ -66,7 +66,7 @@ export const useMediaProcessing = ({
         };
     }, []);
 
-    // Effect to handle Blur Logic
+    // Effect to evaluate Stream Priorities
     useEffect(() => {
         const stopBlur = () => {
             if (rafRef.current) cancelAnimationFrame(rafRef.current);
@@ -106,37 +106,36 @@ export const useMediaProcessing = ({
             }
 
             processedStreamRef.current = canvasStream;
-            updateStreamForPeers(canvasStream);
+            // Only publish blur stream if not screen sharing
+            if (!isScreenSharing) {
+                updateStreamForPeers(canvasStream, false);
+            }
         };
 
-        if (isBlurred) {
+        // Re-evaluate what should be streamed based on Priority
+        if (isScreenSharing) {
+            // Stop blur to save CPU while screen sharing
+            stopBlur();
+            if (screenStreamRef.current) {
+               updateStreamForPeers(screenStreamRef.current, true);
+            }
+        } else if (isBlurred) {
             startBlur();
         } else {
             stopBlur();
-            // Only revert to localStream if we're not currently screen sharing
-            if (!isScreenSharing) {
-                updateStreamForPeers(localStream);
-            }
+            updateStreamForPeers(localStream, false);
         }
 
         return () => stopBlur();
-    }, [isBlurred, localStream, updateStreamForPeers, isScreenSharing]);
+    }, [isBlurred, isScreenSharing, localStream, updateStreamForPeers]);
 
     const stopScreenShare = () => {
-        // Revert to Local Camera Stream
-        console.log("Stopping Screen Share - Reverting to Camera");
-        
+        console.log("Stopping Screen Share");
         if (screenStreamRef.current) {
             screenStreamRef.current.getTracks().forEach(t => t.stop());
             screenStreamRef.current = null;
         }
-
-        if (localStream && localStream.getVideoTracks().length > 0) {
-            updateStreamForPeers(localStream, false);
-        } else {
-            console.warn("Local stream missing on stopScreenShare!");
-        }
-        setIsScreenSharing(false);
+        setIsScreenSharing(false); // This will trigger the useEffect above to revert to Blur or LocalStream safely
     };
 
     const shareScreen = async () => {

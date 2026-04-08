@@ -76,8 +76,13 @@ const Sidebar: React.FC<SidebarProps> = ({
   };
 
   useEffect(() => {
-    chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages, activeTab]);
+    if (isOpen && activeTab === 'chat') {
+      const timer = setTimeout(() => {
+        chatEndRef.current?.scrollIntoView({ behavior: 'auto' });
+      }, 100);
+      return () => clearTimeout(timer);
+    }
+  }, [messages, activeTab, isOpen]);
 
   const handleSend = (e: React.FormEvent) => {
     e.preventDefault();
