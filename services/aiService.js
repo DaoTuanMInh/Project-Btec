@@ -138,7 +138,7 @@ const formatTranscriptWithSpeakers = async (rawText, participants, isLive = fals
 2. Chỉ sửa lỗi chính tả, dấu câu và các từ bị nhận diện sai âm thanh cho đoạn văn trôi chảy hơn (ví dụ: "xin chào" thành "Xin chào").
 3. Không thêm bất kỳ nhận xét, phân tích hay giới thiệu nào.`;
     } else {
-        prompt = `Bạn là một AI xử lý ngôn ngữ tự nhiên. Dưới đây là đoạn hội thoại chưa được phân định người nói:\n\n${rawText}\n\n${contextStr}Hãy phân tích và viết lại nó theo dạng kịch bản có tên người nói. Dựa vào cách họ xưng hô (ví dụ có gọi tên nhau Minh ơi, Long à...) hoặc từ giọng văn để nhận diện, hãy gán tên người nói ở đầu mỗi câu. Nếu không biết tên, có thể dùng "Người 1", "Người 2"...\nTuyệt đối chỉ trả về đoạn hội thoại đã xử lý với cấu trúc Tên: Lời nói, không thêm bất kỳ nhận xét, phân tích hay giới thiệu nào.\nVí dụ:\nMinh: bạn ơi\nLong: ơi mình đây`;
+        prompt = `Bạn là một AI xử lý ngôn ngữ tự nhiên. Dưới đây là đoạn hội thoại chưa được phân định người nói:\n\n${rawText}\n\n${contextStr}Hãy phân tích và viết lại nó theo dạng kịch bản có tên người nói. Dựa vào cách họ xưng hô (ví dụ có gọi tên nhau Minh ơi, Long à...) hoặc từ giọng văn để nhận diện, hãy gán tên người nói ở đầu mỗi câu. Nếu không biết tên, hãy xem xét ngôn ngữ của đoạn hội thoại: sử dụng "Người 1", "Người 2"... nếu là Tiếng Việt, hoặc "Speaker 1", "Speaker 2"... nếu là Tiếng Anh.\nTuyệt đối chỉ trả về đoạn hội thoại đã xử lý với cấu trúc Tên: Lời nói, không thêm bất kỳ nhận xét, phân tích hay giới thiệu nào.\nVí dụ Tiếng Việt:\nMinh: bạn ơi\nNgười 1: ơi mình đây\nVí dụ Tiếng Anh:\nJohn: hello\nSpeaker 1: hi there`;
     }
 
     try {
@@ -170,7 +170,7 @@ const formatTranscriptWithSpeakers = async (rawText, participants, isLive = fals
 const summarizeText = async (text) => {
     if (!process.env.GROQ_API_KEY) throw new Error('GROQ_API_KEY not set');
 
-    const prompt = `Here is the meeting content:\n${text}\n\nPlease summarize the meeting above.\nRequirements:\n1. Always start with the exactly sentence: "Here is the meeting summary:"\n2. DO NOT use bold text (like **) or any markdown formatting. Use plain text only.\n3. The summary structure MUST consist of exactly 2 sections:\n1) Key points\n2) Conclusions/Recommendations\n`;
+    const prompt = `Here is the meeting content:\n${text}\n\nPlease summarize the meeting above.\nRequirements:\n1. Detect the main language of the meeting content (Vietnamese or English).\n2. Write the ENTIRE summary in that detected language.\n3. If the language is Vietnamese, start with exactly "Dưới đây là tóm tắt cuộc họp:", use section headers "1) Các điểm chính" and "2) Kết luận/Đề xuất".\n4. If the language is English, start with exactly "Here is the meeting summary:", use section headers "1) Key points" and "2) Conclusions/Recommendations".\n5. DO NOT use bold text (like **) or any markdown formatting. Use plain text only.\n6. The summary structure MUST consist of exactly 2 sections.`;
 
     const resp = await fetch('https://api.groq.com/openai/v1/chat/completions', {
         method: 'POST',
@@ -178,7 +178,7 @@ const summarizeText = async (text) => {
         body: JSON.stringify({
             model: 'llama-3.3-70b-versatile',
             messages: [
-                { role: 'system', content: 'You are an expert at summarizing meetings. Always return plain text only, absolutely no markdown formatting, no ** tags, no all-caps headers.' },
+                { role: 'system', content: 'You are an expert at summarizing meetings. You must generate the summary in the same language as the meeting content. Always return plain text only, absolutely no markdown formatting, no ** tags, no all-caps headers.' },
                 { role: 'user', content: prompt }
             ],
             temperature: 0.2,

@@ -205,7 +205,7 @@ router.post('/summarize-chat', verifyToken, async (req, res) => {
     const { messages } = req.body;
     if (!messages || messages.length === 0) return res.status(400).json({ error: 'No chat content to summarize' });
     const chatText = messages.map(m => `${m.senderName}: ${m.text}`).join('\n');
-    const prompt = `You are a smart AI assistant. Please read the following conversation from an online meeting and summarize it in English. Please:\n1. List the main points discussed\n2. If there are any conclusions or decisions, please state them clearly\n3. Present them neatly and easy to read\n\nConversation content:\n${chatText}`;
+    const prompt = `You are a smart AI assistant. Please read the following conversation from an online meeting and summarize it in the same language as the conversation (Vietnamese or English).\n\nIf the conversation is in Vietnamese:\n1. Liệt kê các điểm chính\n2. Nêu rõ kết luận hoặc quyết định\n3. Trình bày gọn gàng\n\nIf the conversation is in English:\n1. List the main points discussed\n2. If there are any conclusions or decisions, please state them clearly\n3. Present them neatly and easy to read\n\nConversation content:\n${chatText}`;
     try {
         const groqRes = await fetch('https://api.groq.com/openai/v1/chat/completions', {
             method: 'POST',
