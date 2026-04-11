@@ -87,30 +87,30 @@ export const useWebRTC = ({
         { urls: "stun:stun.relay.metered.ca:80" },
         {
             urls: "turn:global.relay.metered.ca:80",
-            username: "2e9f66a4c3b48062e4e860ef",
-            credential: "xegVtA0WDy37IdFL",
+            username: "ced9c97d1117ab8c44246147",
+            credential: "EGcsAepJdb+9jDuq",
         },
         {
             urls: "turn:global.relay.metered.ca:80?transport=tcp",
-            username: "2e9f66a4c3b48062e4e860ef",
-            credential: "xegVtA0WDy37IdFL",
+            username: "ced9c97d1117ab8c44246147",
+            credential: "EGcsAepJdb+9jDuq",
         },
         {
             urls: "turn:global.relay.metered.ca:443",
-            username: "2e9f66a4c3b48062e4e860ef",
-            credential: "xegVtA0WDy37IdFL",
+            username: "ced9c97d1117ab8c44246147",
+            credential: "EGcsAepJdb+9jDuq",
         },
         {
             urls: "turns:global.relay.metered.ca:443?transport=tcp",
-            username: "2e9f66a4c3b48062e4e860ef",
-            credential: "xegVtA0WDy37IdFL",
+            username: "ced9c97d1117ab8c44246147",
+            credential: "EGcsAepJdb+9jDuq",
         },
     ]);
 
     useEffect(() => {
         const fetchIceServers = async () => {
             try {
-                const response = await fetch("https://avomeeting.metered.live/api/v1/turn/credentials?apiKey=ee39f52e484387bf9a2cf2d22ed77906b7e1");
+                const response = await fetch("https://avosever.metered.live/api/v1/turn/credentials?apiKey=4797b3f8047f005a91e9c717623a98d7f695");
                 const data = await response.json();
                 if (Array.isArray(data)) {
                     console.log("[WebRTC] Dynamic TURN credentials loaded successfully");

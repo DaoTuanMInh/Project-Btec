@@ -56,6 +56,9 @@ const transcribeSingleChunk = async (chunkPath) => {
     const formData = new FormData();
     formData.append('model', 'whisper-large-v3');
     formData.append('file', blob, path.basename(chunkPath));
+    // Important fixes for Whisper "hallucination" on silent audio (YouTube outro glitches)
+    formData.append('temperature', '0.0');
+    formData.append('prompt', 'Đây là bản ghi âm cuộc họp hội nghị. Vui lòng bỏ qua âm thanh trống. Không tạo các câu như "cảm ơn các bạn đã xem", "nhớ like và đăng ký kênh", "hãy subscribe".');
 
     const resp = await fetch('https://api.groq.com/openai/v1/audio/transcriptions', {
         method: 'POST',
