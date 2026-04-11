@@ -18,7 +18,7 @@ const storage = multer.diskStorage({
         cb(null, uniqueSuffix + '-' + file.originalname);
     }
 });
-const upload = multer({ storage, limits: { fileSize: 50 * 1024 * 1024 } });
+const upload = multer({ storage, limits: { fileSize: 500 * 1024 * 1024 } }); // 500MB max
 
 // Middleware xác thực JWT
 const verifyToken = (req, res, next) => {
@@ -38,8 +38,20 @@ router.post('/:roomId/record', verifyToken, upload.single('audio'), async (req, 
     const hostId = req.userId;
     if (!req.file) return res.status(400).json({ error: 'No audio file uploaded' });
 
+    // Enforce host check: scheduled meeting OR room creator
     const schedule = await ScheduledMeeting.findOne({ roomId });
-    if (schedule && schedule.hostId !== hostId) return res.status(403).json({ error: 'Only host can upload recordings' });
+    if (schedule && schedule.hostId !== hostId) {
+        return res.status(403).json({ error: 'Only host can upload recordings' });
+    }
+    if (!schedule) {
+        // For non-scheduled rooms, check the Room document
+        const Room = require('../models/Room');
+        const room = await Room.findOne({ roomId });
+        if (room && room.hostId && room.hostId !== hostId) {
+            return res.status(403).json({ error: 'Only host can upload recordings' });
+        }
+    }
+
 
     const filename = req.body.name || `meeting-${Date.now()}`;
     const originalPath = req.file.path;

@@ -1,7 +1,7 @@
 // @ts-nocheck
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, CalendarPlus, Clock, Mail, Trash2, ArrowRight, Edit2, Save, History, User as UserIcon, Calendar, Power, FileText } from 'lucide-react';
+import { X, CalendarPlus, Clock, Mail, Trash2, ArrowRight, Edit2, Save, History, User as UserIcon, Calendar, Power, FileText, RotateCw } from 'lucide-react';
 import { useToast } from '../ui/Toast';
 import ConfirmModal from '../ui/ConfirmModal';
 import { getMeetingHistory, getToken } from '../../services/authService';
@@ -251,6 +251,17 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({ isOpen, onClose, user, on
             handleFetchMeetingContents();
         }
     }, [activeTab, isOpen]);
+
+    // Always poll every 8s when content tab is open:
+    // - Catches status changes (pending → completed)
+    // - Also catches newly uploaded items when the list was empty
+    useEffect(() => {
+        if (!isOpen || activeTab !== 'meeting-content') return;
+        const timer = setInterval(() => {
+            handleFetchMeetingContents();
+        }, 8000);
+        return () => clearInterval(timer);
+    }, [isOpen, activeTab]);
 
     if (!isOpen) return null;
 
@@ -506,9 +517,25 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({ isOpen, onClose, user, on
                                     <FileText size={56} className="mx-auto text-slate-800 mb-4 opacity-20" />
                                     <p className="text-slate-400 font-medium">No meeting content yet</p>
                                     <p className="text-slate-600 text-xs mt-1">Record a meeting to see summaries and transcripts here.</p>
+                                    <button
+                                        onClick={handleFetchMeetingContents}
+                                        disabled={contentLoading}
+                                        className="mt-4 flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white text-xs font-medium transition-colors mx-auto disabled:opacity-50"
+                                    >
+                                        <RotateCw size={13} className={contentLoading ? 'animate-spin' : ''} /> Refresh
+                                    </button>
                                 </div>
                             ) : (
                                 <div className="space-y-3">
+                                    <div className="flex justify-end mb-2">
+                                        <button
+                                            onClick={handleFetchMeetingContents}
+                                            disabled={contentLoading}
+                                            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white text-xs font-medium transition-colors disabled:opacity-50"
+                                        >
+                                            <RotateCw size={12} className={contentLoading ? 'animate-spin' : ''} /> Refresh
+                                        </button>
+                                    </div>
                                     {meetingContents.map((c) => {
                                         const statusLabel = c.status === 'completed' ? 'Completed' : c.status === 'processing' ? 'Processing…' : c.status === 'failed' ? 'Failed' : 'Pending';
                                         const summaryText = c.status === 'failed' ? 'Processing failed. Please try uploading again.' : (c.summaryText || 'No summary yet. Processing...');

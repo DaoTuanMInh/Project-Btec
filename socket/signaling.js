@@ -87,13 +87,13 @@ const initSocket = (io) => {
                 const decoded = jwt.verify(token, JWT_SECRET);
                 if (decoded.roomId !== roomId || decoded.userId !== userId) {
                     console.warn(`Access Denied: Token mismatch. user=${userId}, room=${roomId}`);
-                    if (typeof callback === 'function') callback({ error: 'Truy cập bị từ chối: Token không hợp lệ cho phòng này.' });
+                    if (typeof callback === 'function') callback({ error: 'Access Denied: Invalid token for this room.' });
                     return;
                 }
                 console.log(`Zero Trust Verified: ${userName} (${userId}) joined room ${roomId}`);
             } catch (err) {
                 console.error('Zero Trust Auth Error:', err.message);
-                if (typeof callback === 'function') callback({ error: `Xác thực thất bại: ${err.message}` });
+                if (typeof callback === 'function') callback({ error: `Authentication failed: ${err.message}` });
                 return;
             }
 
@@ -124,7 +124,7 @@ const initSocket = (io) => {
             try {
                 const decoded = jwt.verify(token, JWT_SECRET);
                 if (decoded.roomId !== roomId || decoded.role !== 'host') {
-                    return callback({ error: 'Truy cập bị từ chối: Chỉ chủ phòng mới có thể thay đổi cài đặt.' });
+                    return callback({ error: 'Access Denied: Only the host can change settings.' });
                 }
                 await Room.updateOne({ roomId, isActive: true }, { $set: { settings, password: settings?.password || '' } });
                 socket.to(roomId).emit('signal', { type: 'room-settings-updated', roomId, settings });
@@ -132,7 +132,7 @@ const initSocket = (io) => {
                 if (typeof callback === 'function') callback({ success: true });
             } catch (e) {
                 console.error('Update Settings Error:', e.message);
-                if (typeof callback === 'function') callback({ error: `Lỗi cập nhật: ${e.message}` });
+                if (typeof callback === 'function') callback({ error: `Update error: ${e.message}` });
             }
         });
 

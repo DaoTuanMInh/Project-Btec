@@ -67,7 +67,7 @@ export const register = async (email: string, username: string, password: string
   try {
     data = text ? JSON.parse(text) : {};
   } catch (e) {
-    throw new Error('Máy chủ gặp lỗi hoặc không trả về dữ liệu chuẩn');
+    throw new Error('Server encountered an error or returned invalid data');
   }
   if (!res.ok) throw new Error(data.error || 'Registration failed');
 };
@@ -84,7 +84,7 @@ export const login = async (email: string, password: string, rememberMe = false)
   try {
     data = text ? JSON.parse(text) : {};
   } catch (e) {
-    throw new Error('Máy chủ gặp lỗi hoặc không trả về dữ liệu chuẩn');
+    throw new Error('Server encountered an error or returned invalid data');
   }
 
   if (!res.ok) throw new Error(data.error || 'Login failed');

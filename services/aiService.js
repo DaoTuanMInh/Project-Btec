@@ -33,6 +33,22 @@ const saveToDocx = async (text, title, outputPath) => {
     fs.writeFileSync(outputPath, buffer);
 };
 
+// Parse Groq API error response into a readable message
+const parseGroqError = async (resp) => {
+    try {
+        const body = await resp.json();
+        const msg = body?.error?.message || body?.message || JSON.stringify(body);
+        const code = body?.error?.code || body?.error?.type || '';
+        if (code === 'rate_limit_exceeded') return 'Groq API rate limit exceeded. Please wait a moment and retry.';
+        if (code === 'invalid_api_key' || resp.status === 401) return 'Groq API key is invalid or missing. Check GROQ_API_KEY in .env';
+        if (resp.status === 413) return 'Audio file is too large for Groq API (max 25MB per chunk).';
+        if (resp.status === 503 || resp.status === 502) return 'Groq API is temporarily unavailable. Please retry later.';
+        return msg || `Groq API error (HTTP ${resp.status})`;
+    } catch {
+        return `Groq API error (HTTP ${resp.status})`;
+    }
+};
+
 // Helper: gửi 1 chunk WAV lên Groq Whisper
 const transcribeSingleChunk = async (chunkPath) => {
     const fileBuffer = fs.readFileSync(chunkPath);
@@ -48,8 +64,8 @@ const transcribeSingleChunk = async (chunkPath) => {
     });
 
     if (!resp.ok) {
-        const errText = await resp.text();
-        throw new Error(`Transcription API failed on chunk ${path.basename(chunkPath)}: ${errText}`);
+        const errMsg = await parseGroqError(resp);
+        throw new Error(`Transcription failed: ${errMsg}`);
     }
 
     const data = await resp.json();
@@ -129,16 +145,16 @@ const transcribeAudioFile = async (wavPath, uploadsPath) => {
 const formatTranscriptWithSpeakers = async (rawText, participants, isLive = false) => {
     if (!process.env.GROQ_API_KEY) return rawText;
 
-    const contextStr = participants ? `Danh sách những người tham gia trong cuộc họp: ${participants}.\n` : '';
+    // Metadata block: clearly separate from conversation text
+    const metaBlock = participants
+        ? `[METADATA - KHÔNG PHẢI HỘI THOẠI]\nDanh sách người tham gia: ${participants}\n[KẾT THÚC METADATA]\n\n`
+        : '';
 
     let prompt = '';
     if (isLive) {
-        prompt = `Bạn là một AI xử lý ngôn ngữ tự nhiên. Dưới đây là biên bản cuộc họp đã có Tên người nói được ghi nhận trực tiếp:\n\n${rawText}\n\n${contextStr}Nhiệm vụ của bạn là:
-1. TUYỆT ĐỐI không thay đổi tên người nói. Giữ nguyên định dạng "Tên: Lời nói" ở đầu mỗi câu.
-2. Chỉ sửa lỗi chính tả, dấu câu và các từ bị nhận diện sai âm thanh cho đoạn văn trôi chảy hơn (ví dụ: "xin chào" thành "Xin chào").
-3. Không thêm bất kỳ nhận xét, phân tích hay giới thiệu nào.`;
+        prompt = `Bạn là một AI xử lý ngôn ngữ tự nhiên.\n${metaBlock}Dưới đây là biên bản cuộc họp đã có Tên người nói được ghi nhận trực tiếp:\n\n${rawText}\n\nNhiệm vụ của bạn là:\n1. TUYỆT ĐỐI không thay đổi tên người nói. Giữ nguyên định dạng "Tên: Lời nói" ở đầu mỗi câu.\n2. Chỉ sửa lỗi chính tả, dấu câu và các từ bị nhận diện sai âm thanh cho đoạn văn trôi chảy hơn.\n3. Không thêm bất kỳ nhận xét, phân tích hay giới thiệu nào.`;
     } else {
-        prompt = `Bạn là một AI xử lý ngôn ngữ tự nhiên. Dưới đây là đoạn hội thoại chưa được phân định người nói:\n\n${rawText}\n\n${contextStr}Hãy phân tích và viết lại nó theo dạng kịch bản có tên người nói. Dựa vào cách họ xưng hô (ví dụ có gọi tên nhau Minh ơi, Long à...) hoặc từ giọng văn để nhận diện, hãy gán tên người nói ở đầu mỗi câu. Nếu không biết tên, hãy xem xét ngôn ngữ của đoạn hội thoại: sử dụng "Người 1", "Người 2"... nếu là Tiếng Việt, hoặc "Speaker 1", "Speaker 2"... nếu là Tiếng Anh.\nTuyệt đối chỉ trả về đoạn hội thoại đã xử lý với cấu trúc Tên: Lời nói, không thêm bất kỳ nhận xét, phân tích hay giới thiệu nào.\nVí dụ Tiếng Việt:\nMinh: bạn ơi\nNgười 1: ơi mình đây\nVí dụ Tiếng Anh:\nJohn: hello\nSpeaker 1: hi there`;
+        prompt = `Bạn là một AI xử lý ngôn ngữ tự nhiên.\n${metaBlock}Dưới đây là đoạn hội thoại thô chưa được phân định người nói (chỉ phần dưới này là nội dung cần xử lý):\n\n${rawText}\n\nHãy phân tích và viết lại nó theo dạng kịch bản có tên người nói. Dựa vào cách họ xưng hô (ví dụ có gọi tên nhau Minh ơi, Long à...) hoặc từ giọng văn để nhận diện, hãy gán tên người nói ở đầu mỗi câu. Nếu không biết tên, hãy xem xét ngôn ngữ của đoạn hội thoại: sử dụng "Người 1", "Người 2"... nếu là Tiếng Việt, hoặc "Speaker 1", "Speaker 2"... nếu là Tiếng Anh.\nTuyệt đối chỉ trả về đoạn hội thoại đã xử lý với cấu trúc Tên: Lời nói, không thêm bất kỳ nhận xét, phân tích hay giới thiệu nào.`;
     }
 
     try {
@@ -148,7 +164,7 @@ const formatTranscriptWithSpeakers = async (rawText, participants, isLive = fals
             body: JSON.stringify({
                 model: 'llama-3.3-70b-versatile',
                 messages: [
-                    { role: 'system', content: 'Bạn là chuyên gia phân tích hội thoại.' },
+                    { role: 'system', content: 'Bạn là chuyên gia phân tích hội thoại. Phần [METADATA] chỉ là thông tin tham khảo, KHÔNG phải nội dung hội thoại, tuyệt đối không đưa nó vào kết quả.' },
                     { role: 'user', content: prompt }
                 ],
                 temperature: 0.1,
@@ -165,6 +181,7 @@ const formatTranscriptWithSpeakers = async (rawText, participants, isLive = fals
     }
     return rawText;
 };
+
 
 // Tóm tắt cuộc họp
 const summarizeText = async (text) => {
@@ -187,8 +204,8 @@ const summarizeText = async (text) => {
     });
 
     if (!resp.ok) {
-        const text = await resp.text();
-        throw new Error(`Summary API failed: ${text}`);
+        const errMsg = await parseGroqError(resp);
+        throw new Error(`Summary failed: ${errMsg}`);
     }
 
     const body = await resp.json();

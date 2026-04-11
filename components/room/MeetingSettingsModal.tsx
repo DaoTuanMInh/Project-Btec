@@ -20,10 +20,11 @@ interface Props {
     logs?: { id: string, time: string, message: string, type: 'info' | 'warning' | 'error' }[];
     unreadLogsCount?: number;
     setUnreadLogsCount?: (n: number) => void;
+    contentRefreshKey?: number; // Increments when a new recording is uploaded
 }
 
 const MeetingSettingsModal: React.FC<Props> = ({
-    isOpen, onClose, joinRequests, participants, roomSettings, onUpdateSettings, onApprove, onReject, roomId, currentUser, onShowToast, logs = [], unreadLogsCount = 0, setUnreadLogsCount
+    isOpen, onClose, joinRequests, participants, roomSettings, onUpdateSettings, onApprove, onReject, roomId, currentUser, onShowToast, logs = [], unreadLogsCount = 0, setUnreadLogsCount, contentRefreshKey
 }) => {
     const [activeTab, setActiveTab] = useState<'requests' | 'participants' | 'settings' | 'meeting-content' | 'logs'>('settings');
     const [showPassword, setShowPassword] = useState(false);
@@ -68,7 +69,27 @@ const MeetingSettingsModal: React.FC<Props> = ({
         }
     }, [isOpen, activeTab]);
 
+    // Auto-poll every 5s when content tab is open and items are still processing
+    React.useEffect(() => {
+        if (!isOpen || activeTab !== 'meeting-content') return;
+        const hasPending = meetingContents.some(c => c.status === 'pending' || c.status === 'processing');
+        if (!hasPending) return;
+        const timer = setInterval(() => {
+            handleFetchMeetingContents();
+        }, 5000);
+        return () => clearInterval(timer);
+    }, [isOpen, activeTab, meetingContents]);
+
+    // Auto-refresh content list when a new recording upload completes (triggered from MeetingRoom)
+    React.useEffect(() => {
+        if (contentRefreshKey && contentRefreshKey > 0) {
+            handleFetchMeetingContents();
+            setActiveTab('meeting-content'); // Auto-switch tab so user sees the new item
+        }
+    }, [contentRefreshKey]);
+
     const handleDeleteMeetingContent = async (id: string) => {
+
         try {
             const token = getToken();
             const res = await fetch(`/api/meetings/content/${id}`, {

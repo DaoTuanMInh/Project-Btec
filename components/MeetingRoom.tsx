@@ -15,6 +15,7 @@ import { useMeetingState } from '../hooks/useMeetingState';
 import { useWebRTC } from '../hooks/useWebRTC';
 import { useMediaProcessing } from '../hooks/useMediaProcessing';
 import { useMeetingSignaling } from '../hooks/useMeetingSignaling';
+import { getToken } from '../services/authService';
 
 interface Props {
   user: User;
@@ -68,6 +69,7 @@ const MeetingRoom: React.FC<Props> = ({ user, roomId, localStream, onLeave, sett
   const [showRecordingNameInput, setShowRecordingNameInput] = React.useState(false);
   const [stopConfirming, setStopConfirming] = React.useState(false);
   const [roomCloseAfterSave, setRoomCloseAfterSave] = React.useState(false);
+  const [contentRefreshKey, setContentRefreshKey] = React.useState(0); // Increments after each successful upload
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const targetFileNameRef = useRef<string>(`meeting-${Date.now()}`);
 
@@ -183,6 +185,11 @@ const MeetingRoom: React.FC<Props> = ({ user, roomId, localStream, onLeave, sett
   const startRecordingWithName = async (filename: string) => {
     if (!state.isCurrentUserHost) {
       state.showToast('Only host can start recording.', 'warning');
+      return;
+    }
+    // Pre-check: recording requires authentication to upload
+    if (!getToken()) {
+      state.showToast('Recording requires you to be logged in. Please log in first.', 'error');
       return;
     }
     if (isRecording) return;
@@ -304,6 +311,10 @@ const MeetingRoom: React.FC<Props> = ({ user, roomId, localStream, onLeave, sett
             return;
         }
 
+        // Always clear transcript at start of upload — prevents old content accumulating
+        // regardless of whether this upload succeeds or fails
+        transcriptRef.current = [];
+
         await uploadRecordedBlob(blob, targetFileNameRef.current);
 
         // Teardown the audio context
@@ -357,7 +368,17 @@ const MeetingRoom: React.FC<Props> = ({ user, roomId, localStream, onLeave, sett
   };
 
   const uploadRecordedBlob = async (blob: Blob, filename: string) => {
-    setRecordingLabel('Processing...');
+    // Pre-check: ensure user is authenticated before wasting a large file upload
+    const token = getToken();
+    if (!token) {
+      state.showToast('Upload failed: You are not logged in. Please log in and try again.', 'error');
+      setRecordingLabel('Upload failed — not authenticated');
+      setTimeout(() => setRecordingLabel('Ready'), 4000);
+      return;
+    }
+
+    const sizeMB = (blob.size / 1024 / 1024).toFixed(1);
+    setRecordingLabel(`Uploading (${sizeMB} MB)...`);
     const formData = new FormData();
     formData.append('audio', blob, `${filename}.webm`);
     formData.append('roomId', roomId);
@@ -366,24 +387,29 @@ const MeetingRoom: React.FC<Props> = ({ user, roomId, localStream, onLeave, sett
     const names = Array.from(new Set(state.peers.map(p => p.userName))).filter(Boolean).join(', ');
     if (names) formData.append('participants', names);
 
-    // Always send the local transcript if we have it (Speaker names are already included here)
+    // Send the snapshot of transcript captured before upload started
     if (transcriptRef.current && transcriptRef.current.length > 0) {
         formData.append('rawTranscript', transcriptRef.current.join('\n'));
     }
 
     try {
-      const token = localStorage.getItem('avo_auth_token') || sessionStorage.getItem('avo_auth_token');
-      const res = await fetch(`/api/meetings/${roomId}/record`, { method: 'POST', body: formData, headers: token ? { Authorization: `Bearer ${token}` } : {} });
+      const res = await fetch(`/api/meetings/${roomId}/record`, {
+        method: 'POST',
+        body: formData,
+        headers: { Authorization: `Bearer ${token}` }
+      });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Record upload failed');
       state.showToast('Recording uploaded successfully. Sending to AI summarizer...', 'success');
-      setRecordingLabel('Uploaded, waiting summary');
+      setRecordingLabel('Uploaded ✓');
+      // Trigger Content tab refresh in MeetingSettingsModal
+      setContentRefreshKey(k => k + 1);
     } catch (err: any) {
       console.error(err);
       state.showToast(`Audio upload failed: ${err.message || err}`, 'error');
-      setRecordingLabel('Failed');
+      setRecordingLabel('Upload failed');
     } finally {
-      setRecordingLabel('Ready');
+      setTimeout(() => setRecordingLabel('Ready'), 3000);
     }
   };
 
@@ -723,12 +749,12 @@ const MeetingRoom: React.FC<Props> = ({ user, roomId, localStream, onLeave, sett
             }} />
             <div className="relative w-full max-w-md bg-slate-900 border border-slate-700 rounded-2xl p-5 shadow-2xl z-10">
               <h3 className="text-white text-lg font-bold mb-2">Enter summary filename</h3>
-              <p className="text-slate-400 text-sm mb-4">Nhập tên tóm tắt (ví dụ: Buoi-hop-1)</p>
+              <p className="text-slate-400 text-sm mb-4">Enter summary filename (e.g., Meeting-1)</p>
               <input
                 value={recordingName}
                 onChange={(e) => setRecordingName(e.target.value)}
                 className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-700 text-sm text-white focus:outline-none focus:border-indigo-500"
-                placeholder="example: Buoi-hop-1"
+                placeholder="example: Meeting-1"
               />
               <div className="mt-4 flex justify-end gap-2">
                 <button onClick={() => {
@@ -848,6 +874,7 @@ const MeetingRoom: React.FC<Props> = ({ user, roomId, localStream, onLeave, sett
         logs={state.logs}
         unreadLogsCount={state.unreadLogsCount}
         setUnreadLogsCount={state.setUnreadLogsCount}
+        contentRefreshKey={contentRefreshKey}
       />
 
       <ConfirmModal isOpen={state.mediaRequestModal.isOpen} title="Request" message={state.mediaRequestModal.message} onConfirm={handleModalConfirm} onCancel={handleModalCancel} confirmText="Confirm" cancelText="Cancel" type="info" />

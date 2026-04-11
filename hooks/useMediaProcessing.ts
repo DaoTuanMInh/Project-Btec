@@ -69,7 +69,7 @@ export const useMediaProcessing = ({
     // Effect to evaluate Stream Priorities
     useEffect(() => {
         const stopBlur = () => {
-            if (rafRef.current) cancelAnimationFrame(rafRef.current);
+            if (rafRef.current) window.clearTimeout(rafRef.current);
             if (sourceVideoRef.current) {
                 sourceVideoRef.current.pause();
                 sourceVideoRef.current.srcObject = null;
@@ -77,51 +77,72 @@ export const useMediaProcessing = ({
             processedStreamRef.current = null;
         };
 
-        const startBlur = async () => {
+        const startBlur = async (streamToBlur: MediaStream, isScreenShareUpdate: boolean) => {
             const canvas = canvasRef.current;
             const video = sourceVideoRef.current;
             if (!canvas || !video) return;
 
-            video.srcObject = localStream;
+            video.srcObject = streamToBlur;
+            
+            // Wait for metadata so video dimensions are known
+            await new Promise((resolve) => {
+                if (video.readyState >= 1) return resolve(true);
+                video.onloadedmetadata = () => resolve(true);
+                setTimeout(() => resolve(true), 1500); // 1.5s timeout fallback
+            });
+
             await video.play().catch(e => console.error("Blur source play failed", e));
 
             const ctx = canvas.getContext('2d');
             if (!ctx) return;
 
+            // Set canvas size statically ONCE before captureStream to prevent WebRTC track corruption
+            const scaleDown = 10;
+            canvas.width = Math.max(1, Math.floor((video.videoWidth || 1280) / scaleDown));
+            canvas.height = Math.max(1, Math.floor((video.videoHeight || 720) / scaleDown));
+
             const draw = () => {
                 if (!video || !ctx || !canvas) return;
+
                 if (video.videoWidth > 0 && video.videoHeight > 0) {
-                    canvas.width = video.videoWidth;
-                    canvas.height = video.videoHeight;
-                    ctx.filter = 'blur(20px)';
+                    ctx.filter = 'blur(4px)';
                     ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
                 }
-                rafRef.current = requestAnimationFrame(draw);
+                
+                // Use setTimeout (15 FPS = ~66ms) instead of requestAnimationFrame.
+                // rAF will completely stop or heavily pause if the tab is hidden or canvas is invisible,
+                // which causes permanent stream freezing over WebRTC.
+                rafRef.current = window.setTimeout(draw, 66);
             };
             draw();
 
             const canvasStream = canvas.captureStream(30);
+            
+            // Re-attach audio if needed
             if (localStream.getAudioTracks()[0]) {
                 canvasStream.addTrack(localStream.getAudioTracks()[0]);
+            } else if (streamToBlur.getAudioTracks()[0]) {
+                canvasStream.addTrack(streamToBlur.getAudioTracks()[0]);
             }
 
             processedStreamRef.current = canvasStream;
-            // Only publish blur stream if not screen sharing
-            if (!isScreenSharing) {
-                updateStreamForPeers(canvasStream, false);
-            }
+            updateStreamForPeers(canvasStream, isScreenShareUpdate);
         };
 
         // Re-evaluate what should be streamed based on Priority
-        if (isScreenSharing) {
-            // Stop blur to save CPU while screen sharing
-            stopBlur();
-            if (screenStreamRef.current) {
-               updateStreamForPeers(screenStreamRef.current, true);
+        if (isScreenSharing && screenStreamRef.current) {
+            if (isBlurred) {
+                // Blur the screen share stream
+                startBlur(screenStreamRef.current, true);
+            } else {
+                stopBlur();
+                updateStreamForPeers(screenStreamRef.current, true);
             }
         } else if (isBlurred) {
-            startBlur();
+            // Blur the camera stream
+            startBlur(localStream, false);
         } else {
+            // Normal camera stream
             stopBlur();
             updateStreamForPeers(localStream, false);
         }

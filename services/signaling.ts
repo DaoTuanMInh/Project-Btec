@@ -63,17 +63,17 @@ class SignalingService {
             </svg>
           </div>
           <h3 style="color: #fff; font-size: 17px; font-weight: 700; margin: 0 0 10px; letter-spacing: -0.3px;">
-            Phiên đăng nhập bị thay thế
+            Session replaced
           </h3>
           <p style="color: #94a3b8; font-size: 14px; line-height: 1.6; margin: 0 0 24px;">
-            Tài khoản của bạn vừa đăng nhập ở một thiết bị khác.<br/>
-            Bạn đã bị đăng xuất khỏi thiết bị này.
+            Your account logged in from another device.<br/>
+            You have been logged out of this device.
           </p>
           <button id="fl-btn" style="
             width: 100%; padding: 12px 20px; border-radius: 12px; border: none; cursor: pointer;
             background: #ef4444; color: #fff; font-size: 14px; font-weight: 600;
             box-shadow: 0 4px 20px rgba(239,68,68,0.35); transition: opacity 0.2s;
-          ">Đăng nhập lại</button>
+          ">Log in again</button>
         </div>
         <style>@keyframes fadeIn { from { opacity:0; transform:scale(0.93) } to { opacity:1; transform:scale(1) } }</style>
       `;

@@ -64,17 +64,31 @@ const processMeetingQueue = async () => {
 
         console.log(`[MeetingContent Worker] Transcribing: ${contentId}`);
         let transcript = meetingContent.transcriptText;
+        const MIN_CONTENT_LENGTH = 15; // Minimum chars to consider valid speech
+
         if (!transcript) {
             const rawAudioText = await transcribeAudioFile(wavPath, uploadsPath);
-            console.log(`[MeetingContent Worker] AI Identifying speakers: ${contentId}`);
-            transcript = await formatTranscriptWithSpeakers(rawAudioText, meetingContent.participants, false);
+            if (!rawAudioText || rawAudioText.trim().length < MIN_CONTENT_LENGTH) {
+                console.log(`[MeetingContent Worker] Audio appears empty or has no speech: ${contentId}`);
+                transcript = '[No speech content was detected in this recording.]';
+            } else {
+                console.log(`[MeetingContent Worker] AI Identifying speakers: ${contentId}`);
+                transcript = await formatTranscriptWithSpeakers(rawAudioText, meetingContent.participants, false);
+            }
+        } else if (transcript.trim().length < MIN_CONTENT_LENGTH) {
+            // rawTranscript exists but too short to be meaningful
+            transcript = '[The speech content is too short to process.]';
         } else {
             console.log(`[MeetingContent Worker] Using local live transcript: ${contentId}`);
             transcript = await formatTranscriptWithSpeakers(transcript, meetingContent.participants, true);
         }
 
+
         console.log(`[MeetingContent Worker] Summarizing: ${contentId}`);
-        const summary = await summarizeText(transcript);
+        const isEmptyTranscript = transcript.startsWith('[') && transcript.endsWith(']');
+        const summary = isEmptyTranscript
+            ? '[No content available to summarize.]'
+            : await summarizeText(transcript);
 
         const transcriptPath = path.join(uploadsPath, `${Date.now()}-${meetingContent._id}-transcript.txt`);
         const summaryPath = path.join(uploadsPath, `${Date.now()}-${meetingContent._id}-summary.txt`);
