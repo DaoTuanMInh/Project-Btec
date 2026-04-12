@@ -802,8 +802,14 @@ const MeetingRoom: React.FC<Props> = ({ user, roomId, localStream, onLeave, sett
         onSendFile={async (file) => {
           const formData = new FormData();
           formData.append('file', file);
+          formData.append('roomId', roomId); // gắn roomId để server biết file thuộc phòng nào
           try {
-            const res = await fetch('/api/chat/upload', { method: 'POST', body: formData });
+            const token = getToken();
+            const res = await fetch('/api/chat/upload', {
+              method: 'POST',
+              body: formData,
+              headers: token ? { Authorization: `Bearer ${token}` } : {}
+            });
             const data = await res.json();
             if (data.url) {
               const isImage = file.type.startsWith('image/');

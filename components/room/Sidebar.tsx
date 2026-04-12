@@ -27,6 +27,14 @@ interface SidebarProps {
 
 const MotionDiv = motion.div as any;
 
+// Gắn token vào URL file để browser có thể load <img> và <a href> qua /uploads
+const buildFileUrl = (url?: string): string => {
+  if (!url) return url || '';
+  const token = getToken();
+  if (!token || !url.startsWith('/uploads/')) return url;
+  return `${url}?token=${token}`;
+};
+
 const Sidebar: React.FC<SidebarProps> = ({
   isOpen,
   onClose,
@@ -430,8 +438,8 @@ const Sidebar: React.FC<SidebarProps> = ({
                           {msg.fileUrl ? (
                             <div className="flex flex-col gap-2 min-w-[150px]">
                               {msg.isImage ? (
-                                <a href={msg.fileUrl} target="_blank" rel="noreferrer" className="block rounded-lg overflow-hidden hover:opacity-90 transition-opacity">
-                                  <img src={msg.fileUrl} alt={msg.fileName} className="max-w-full h-auto max-h-[250px] object-cover rounded-[10px]" />
+                                <a href={buildFileUrl(msg.fileUrl)} target="_blank" rel="noreferrer" className="block rounded-lg overflow-hidden hover:opacity-90 transition-opacity">
+                                  <img src={buildFileUrl(msg.fileUrl)} alt={msg.fileName} className="max-w-full h-auto max-h-[250px] object-cover rounded-[10px]" />
                                 </a>
                               ) : (
                                 <div className="flex items-center gap-3 bg-white/10 p-2 rounded-lg">
@@ -446,7 +454,7 @@ const Sidebar: React.FC<SidebarProps> = ({
                               )}
                               {(!msg.isImage) && (
                                 <a
-                                  href={msg.fileUrl}
+                                  href={buildFileUrl(msg.fileUrl)}
                                   download={msg.fileName}
                                   className={`flex items-center justify-center gap-2 py-1.5 rounded-lg text-[11px] font-bold transition-all ${isMe ? 'bg-white/20 hover:bg-white/30 text-white' : 'bg-blue-600 hover:bg-blue-500 text-white'}`}
                                 >

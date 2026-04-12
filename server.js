@@ -13,13 +13,13 @@ const jwt = require('jsonwebtoken');
 const { router: authRouter, transporter } = require('./routes/auth');
 const meetingsRouter = require('./routes/meetings');
 const usersRouter = require('./routes/users');
-const { router: chatRouter } = require('./routes/chat');
+const { router: chatRouter, fileRoomMap } = require('./routes/chat');
 
 // ── Services ─────────────────────────────────────────────
 const { enqueuePendingMeetingContents } = require('./services/meetingWorker');
 
 // ── Socket ───────────────────────────────────────────────
-const { initSocket } = require('./socket/signaling');
+const { initSocket, roomMap } = require('./socket/signaling');
 
 // ── Models (chỉ dùng trong cron) ────────────────────────
 const Room = require('./models/Room');
@@ -43,6 +43,31 @@ const uploadsPath = path.join(__dirname, 'uploads');
 if (!fs.existsSync(uploadsPath)) fs.mkdirSync(uploadsPath);
 app.get('/favicon.ico', (req, res) => res.sendStatus(204));
 
+// Bảo vệ /uploads — chỉ người đang trong đúng phòng chứa file mới truy cập được
+// Token có thể qua Authorization header hoặc ?token= (cho <img> và <a href>)
+app.use('/uploads', (req, res, next) => {
+    const authHeader = req.headers['authorization'];
+    const token = (authHeader && authHeader.split(' ')[1]) || req.query.token;
+    if (!token) return res.status(401).send('Unauthorized');
+    let decoded;
+    try {
+        decoded = jwt.verify(token, process.env.JWT_SECRET || 'avo-secret-zero-trust-key-2024');
+    } catch (e) {
+        return res.status(403).send('Forbidden: Invalid token');
+    }
+    const userId = decoded.id || decoded.userId || decoded._id;
+    // Lấy tên file từ URL path (/uploads/<filename>)
+    const filename = req.path.replace(/^\//, '').split('?')[0];
+    // Tìm roomId mà file này được upload vào
+    const fileRoom = fileRoomMap.get(filename);
+    if (!fileRoom) return res.status(403).send('Forbidden: File not found or session expired.');
+    // Kiểm tra user có đang trong đúng phòng chứa file không
+    const roomUsers = roomMap[fileRoom] || [];
+    const isInRoom = roomUsers.some(u => u.id === userId);
+    if (!isInRoom) return res.status(403).send('Forbidden: You must be in the room that owns this file.');
+    next();
+}, express.static(uploadsPath));
+
 // 3. HTTP Server & Socket.io
 const server = http.createServer(app);
 const io = new Server(server, {
@@ -59,10 +84,10 @@ mongoose.connect(process.env.MONGO_URI)
 app.use('/api/auth', authRouter);
 
 // Frontend gọi trực tiếp (không có prefix /auth/)
-app.use('/api/send-otp',        authRouter);
-app.use('/api/verify-otp',      authRouter);
+app.use('/api/send-otp', authRouter);
+app.use('/api/verify-otp', authRouter);
 app.use('/api/forgot-password', authRouter);
-app.use('/api/reset-password',  authRouter);
+app.use('/api/reset-password', authRouter);
 
 app.use('/api/meetings', meetingsRouter);
 
@@ -148,6 +173,22 @@ cron.schedule('* * * * *', async () => {
         const staleRooms = await Room.find({ isActive: true, createdAt: { $lt: twelveHoursAgo } });
         for (const room of staleRooms) {
             await Room.updateOne({ _id: room._id }, { isActive: false, endedAt: new Date() });
+            // Xóa file vật lý trên disk trước khi xóa tin nhắn khỏi DB
+            const fileMessages = await Message.find({ roomId: room.roomId, fileUrl: { $exists: true, $ne: null } });
+            for (const msg of fileMessages) {
+                if (msg.fileUrl) {
+                    const filename = msg.fileUrl.replace(/^\/uploads\//, '');
+                    const filePath = path.join(uploadsPath, filename);
+                    try {
+                        if (fs.existsSync(filePath)) {
+                            fs.unlinkSync(filePath);
+                            console.log(`[Cleanup] Deleted file: ${filename}`);
+                        }
+                    } catch (err) {
+                        console.error(`[Cleanup] Failed to delete ${filename}:`, err.message);
+                    }
+                }
+            }
             await Message.deleteMany({ roomId: room.roomId });
             io.to(room.roomId).emit('signal', { type: 'room-closed', roomId: room.roomId, reason: 'Auto-close after 12 hours of inactivity' });
             console.log(`Auto-close room: ${room.roomId} (over 12 hours)`);

@@ -1,9 +1,13 @@
 const jwt = require('jsonwebtoken');
+const path = require('path');
+const fs = require('fs');
 const Room = require('../models/Room');
 const Message = require('../models/Message');
 const ScheduledMeeting = require('../models/ScheduledMeeting');
 const User = require('../models/User');
 const { encryptText, decryptText } = require('../routes/chat');
+
+const uploadsPath = path.join(__dirname, '..', 'uploads');
 
 const JWT_SECRET = process.env.JWT_SECRET || 'avo-secret-zero-trust-key-2024';
 
@@ -190,7 +194,17 @@ const initSocket = (io) => {
                         const roomInfo = await Room.findOne({ roomId, isActive: true });
                         if (!roomInfo || roomInfo.settings?.autoCloseWhenEmpty !== false) {
                             Room.updateOne({ roomId, isActive: true }, { isActive: false, endedAt: new Date() }).catch(() => {});
-                            Message.deleteMany({ roomId }).catch(() => {});
+                            // Xóa file vật lý trước khi xóa tin nhắn
+                            Message.find({ roomId, fileUrl: { $exists: true, $ne: null } }).then(msgs => {
+                                msgs.forEach(msg => {
+                                    const filename = (msg.fileUrl || '').replace(/^\/uploads\//, '');
+                                    if (filename) {
+                                        const filePath = path.join(uploadsPath, filename);
+                                        try { if (fs.existsSync(filePath)) fs.unlinkSync(filePath); } catch (_) {}
+                                    }
+                                });
+                                Message.deleteMany({ roomId }).catch(() => {});
+                            }).catch(() => { Message.deleteMany({ roomId }).catch(() => {}); });
                         }
                     }
                 }
@@ -216,7 +230,17 @@ const initSocket = (io) => {
                         const roomInfo = await Room.findOne({ roomId, isActive: true });
                         if (!roomInfo || roomInfo.settings?.autoCloseWhenEmpty !== false) {
                             Room.updateOne({ roomId, isActive: true }, { isActive: false, endedAt: new Date() }).catch(() => {});
-                            Message.deleteMany({ roomId }).catch(() => {});
+                            // Xóa file vật lý trước khi xóa tin nhắn
+                            Message.find({ roomId, fileUrl: { $exists: true, $ne: null } }).then(msgs => {
+                                msgs.forEach(msg => {
+                                    const filename = (msg.fileUrl || '').replace(/^\/uploads\//, '');
+                                    if (filename) {
+                                        const filePath = path.join(uploadsPath, filename);
+                                        try { if (fs.existsSync(filePath)) fs.unlinkSync(filePath); } catch (_) {}
+                                    }
+                                });
+                                Message.deleteMany({ roomId }).catch(() => {});
+                            }).catch(() => { Message.deleteMany({ roomId }).catch(() => {}); });
                         }
                     }
                 }

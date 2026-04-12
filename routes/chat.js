@@ -45,9 +45,14 @@ const storage = multer.diskStorage({
 });
 const upload = multer({ storage, limits: { fileSize: 50 * 1024 * 1024 } });
 
+// filename -> roomId mapping (in-memory, dùng để kiểm tra quyền truy cập file)
+const fileRoomMap = new Map();
+
 // Upload file chat
 router.post('/upload', upload.single('file'), (req, res) => {
     if (!req.file) return res.status(400).json({ error: 'No file' });
+    const roomId = req.body.roomId;
+    if (roomId) fileRoomMap.set(req.file.filename, roomId);
     res.json({ url: `/uploads/${req.file.filename}`, fileName: req.file.originalname, fileSize: req.file.size });
 });
 
@@ -64,4 +69,4 @@ router.get('/history/:roomId', async (req, res) => {
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-module.exports = { router, encryptText, decryptText };
+module.exports = { router, encryptText, decryptText, fileRoomMap };
